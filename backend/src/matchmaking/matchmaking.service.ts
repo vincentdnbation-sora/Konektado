@@ -62,45 +62,61 @@ export class MatchmakingService {
 
     const candidates = await redis.zrange(QUEUE_KEY, 0, -1);
 
-    for (let i = 0; i < candidates.length; i++) {
-      const userId = candidates[i];
+    // Fetch all candidate data and filter out already-matched users
+    const activeUsers: Array<{ userId: string; data: Record<string, string> }> = [];
+    for (const userId of candidates) {
       const isMatched = await redis.sismember(MATCHED_SET, userId);
       if (isMatched) continue;
-
       const userData = await redis.hgetall(`${USER_DATA_PREFIX}${userId}`);
-      if (!userData) continue;
+      if (!userData || !Object.keys(userData).length) continue;
+      activeUsers.push({ userId, data: userData });
+    }
 
-      for (let j = i + 1; j < candidates.length; j++) {
-        const candidateId = candidates[j];
-        const isMatchedCandidate = await redis.sismember(MATCHED_SET, candidateId);
-        if (isMatchedCandidate) continue;
+    if (activeUsers.length < 2) return;
 
-        const candidateData = await redis.hgetall(`${USER_DATA_PREFIX}${candidateId}`);
-        if (!candidateData) continue;
+    // Build all valid candidate pairs with distance scores (nearest first)
+    type Pair = { i: number; j: number; distKm: number };
+    const pairs: Pair[] = [];
 
-        // Only enforce distance if both users have location
+    for (let i = 0; i < activeUsers.length; i++) {
+      for (let j = i + 1; j < activeUsers.length; j++) {
+        const u = activeUsers[i];
+        const v = activeUsers[j];
+
         const bothHaveLocation =
-          userData.hasLocation === '1' && candidateData.hasLocation === '1';
-        if (bothHaveLocation) {
-          const dist = this.getDistanceKm(
-            +userData.lat, +userData.lng,
-            +candidateData.lat, +candidateData.lng,
-          );
-          if (dist > +userData.maxDistanceKm) continue;
-        }
+          u.data.hasLocation === '1' && v.data.hasLocation === '1';
 
-        const recentMatch = await this.hasRecentMatch(userId, candidateId);
-        if (recentMatch) continue;
+        const distKm = bothHaveLocation
+          ? this.getDistanceKm(+u.data.lat, +u.data.lng, +v.data.lat, +v.data.lng)
+          : Infinity; // no location → lowest priority but still matchable
 
-        const blocked = await this.isBlocked(userId, candidateId);
-        if (blocked) continue;
+        pairs.push({ i, j, distKm });
+      }
+    }
 
-        try {
-          await this.createMatch(userId, candidateId, redis, server);
-        } catch (err) {
-          this.logger.error(`createMatch failed for ${userId} <-> ${candidateId}:`, err);
-        }
-        break;
+    // Sort pairs: nearest first, no-location pairs last
+    pairs.sort((a, b) => a.distKm - b.distKm);
+
+    // Greedily match pairs, skipping already-matched users
+    const matchedInRun = new Set<number>();
+    for (const { i, j } of pairs) {
+      if (matchedInRun.has(i) || matchedInRun.has(j)) continue;
+
+      const u = activeUsers[i];
+      const v = activeUsers[j];
+
+      const recentMatch = await this.hasRecentMatch(u.userId, v.userId);
+      if (recentMatch) continue;
+
+      const blocked = await this.isBlocked(u.userId, v.userId);
+      if (blocked) continue;
+
+      try {
+        await this.createMatch(u.userId, v.userId, redis, server);
+        matchedInRun.add(i);
+        matchedInRun.add(j);
+      } catch (err) {
+        this.logger.error(`createMatch failed for ${u.userId} <-> ${v.userId}:`, err);
       }
     }
   }
