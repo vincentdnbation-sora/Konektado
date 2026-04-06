@@ -42,9 +42,10 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     private matchmakingService: MatchmakingService,
     private jwtService: JwtService,
   ) {
+    // Fallback interval in case immediate trigger misses someone
     this.matchInterval = setInterval(() => {
       this.matchmakingService.runMatchmaking(this.redis, this.server);
-    }, 2000);
+    }, 500);
   }
 
   async handleConnection(client: Socket) {
@@ -74,6 +75,8 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       this.redis,
     );
     client.emit('queue_status', result);
+    // Immediately attempt to match instead of waiting for the interval
+    this.matchmakingService.runMatchmaking(this.redis, this.server);
   }
 
   @SubscribeMessage('leave_queue')
