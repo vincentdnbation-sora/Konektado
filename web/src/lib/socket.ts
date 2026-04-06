@@ -29,14 +29,12 @@ export function getSocket(): Socket {
       forceNew: false,
     });
 
-    // Debug logging in dev
-    if (process.env.NODE_ENV === 'development') {
-      socket.on('connect', () => console.log('[socket] connected', socket?.id));
-      socket.on('disconnect', (reason) => console.log('[socket] disconnected:', reason));
-      socket.on('connect_error', (err) => console.log('[socket] connect_error:', err.message));
-      socket.on('reconnect_attempt', (n) => console.log('[socket] reconnect attempt', n));
-      socket.on('reconnect', () => console.log('[socket] reconnected'));
-    }
+    // Connection lifecycle logging — always on so production voice issues are diagnosable
+    socket.on('connect', () => console.log('[socket] connected id=' + socket?.id));
+    socket.on('disconnect', (reason) => console.warn('[socket] disconnected:', reason));
+    socket.on('connect_error', (err) => console.error('[socket] connect_error:', err.message));
+    socket.on('reconnect_attempt', (n) => console.log('[socket] reconnect_attempt #' + n));
+    socket.on('reconnect', () => console.log('[socket] reconnected id=' + socket?.id));
   }
   return socket;
 }

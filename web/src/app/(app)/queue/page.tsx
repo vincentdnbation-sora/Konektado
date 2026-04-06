@@ -38,6 +38,13 @@ export default function QueuePage() {
     };
 
     const onMatchFound = (data: any) => {
+      console.log('[QueuePage] match_found received', {
+        matchId: data.matchId,
+        roomName: data.roomName,
+        tokenLen: data.token?.length,
+        livekitUrl: data.livekitUrl,
+        partnerId: data.partnerId,
+      });
       setMatch(data);
       router.push(`/call/${data.matchId}`);
     };

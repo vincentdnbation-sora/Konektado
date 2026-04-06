@@ -52,6 +52,13 @@ export const useMatchStore = create<MatchState>((set) => ({
   lastLocation: saved.lastLocation ?? null,
 
   setMatch: (data) => {
+    console.log('[matchStore] setMatch', {
+      matchId: data.matchId,
+      roomName: data.roomName,
+      tokenLen: data.token?.length,
+      livekitUrl: LIVEKIT_URL,
+      partnerId: data.partnerId,
+    });
     const state = {
       matchId: data.matchId,
       roomName: data.roomName,

@@ -14,7 +14,7 @@ import {
   useTracks,
   useRoomContext,
 } from '@livekit/components-react';
-import { ConnectionState, Track } from 'livekit-client';
+import { ConnectionState, Track, RoomEvent } from 'livekit-client';
 import '@livekit/components-styles';
 import CallControls from '@/components/call/CallControls';
 import MiniGame from '@/components/call/MiniGame';
@@ -25,7 +25,7 @@ import { toast } from 'sonner';
  * Inner component — must be rendered inside <LiveKitRoom>.
  * Handles mic capture, remote audio playback, and connection status display.
  */
-function CallRoom({ isMuted }: { isMuted: boolean }) {
+function CallRoom({ isMuted, onRetry }: { isMuted: boolean; onRetry: () => void }) {
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
@@ -59,6 +59,56 @@ function CallRoom({ isMuted }: { isMuted: boolean }) {
       console.log(`[CallRoom] track: participant=${t.participant.identity} source=${t.source} subscribed=${t.publication?.isSubscribed}`);
     });
   }, [audioTracks]);
+
+  // Room event listeners for detailed voice pipeline diagnostics
+  useEffect(() => {
+    if (!room) return;
+
+    const onSignalConnected = () => console.log('[CallRoom] signal connected');
+    const onMediaDevicesError = (err: Error) => console.error('[CallRoom] media devices error:', err);
+    const onLocalTrackPublished = (pub: any) =>
+      console.log('[CallRoom] local track published:', pub.track?.kind, pub.source);
+    const onLocalTrackUnpublished = (pub: any) =>
+      console.log('[CallRoom] local track unpublished:', pub.track?.kind);
+    const onTrackSubscribed = (track: any, pub: any, participant: any) =>
+      console.log('[CallRoom] remote track subscribed:', track.kind, 'from', participant.identity);
+    const onTrackUnsubscribed = (track: any, pub: any, participant: any) =>
+      console.log('[CallRoom] remote track unsubscribed:', track.kind, 'from', participant.identity);
+    const onParticipantConnected = (p: any) =>
+      console.log('[CallRoom] participant connected:', p.identity);
+    const onParticipantDisconnected = (p: any) =>
+      console.log('[CallRoom] participant disconnected:', p.identity);
+    const onReconnecting = () => console.warn('[CallRoom] reconnecting to voice server...');
+    const onReconnected = () => console.log('[CallRoom] reconnected to voice server');
+    const onRoomDisconnected = (reason?: any) =>
+      console.warn('[CallRoom] room disconnected, reason:', reason);
+
+    room.on(RoomEvent.SignalConnected, onSignalConnected);
+    room.on(RoomEvent.MediaDevicesError, onMediaDevicesError);
+    room.on(RoomEvent.LocalTrackPublished, onLocalTrackPublished);
+    room.on(RoomEvent.LocalTrackUnpublished, onLocalTrackUnpublished);
+    room.on(RoomEvent.TrackSubscribed, onTrackSubscribed);
+    room.on(RoomEvent.TrackUnsubscribed, onTrackUnsubscribed);
+    room.on(RoomEvent.ParticipantConnected, onParticipantConnected);
+    room.on(RoomEvent.ParticipantDisconnected, onParticipantDisconnected);
+    room.on(RoomEvent.Reconnecting, onReconnecting);
+    room.on(RoomEvent.Reconnected, onReconnected);
+    room.on(RoomEvent.Disconnected, onRoomDisconnected);
+
+    return () => {
+      room.off(RoomEvent.SignalConnected, onSignalConnected);
+      room.off(RoomEvent.MediaDevicesError, onMediaDevicesError);
+      room.off(RoomEvent.LocalTrackPublished, onLocalTrackPublished);
+      room.off(RoomEvent.LocalTrackUnpublished, onLocalTrackUnpublished);
+      room.off(RoomEvent.TrackSubscribed, onTrackSubscribed);
+      room.off(RoomEvent.TrackUnsubscribed, onTrackUnsubscribed);
+      room.off(RoomEvent.ParticipantConnected, onParticipantConnected);
+      room.off(RoomEvent.ParticipantDisconnected, onParticipantDisconnected);
+      room.off(RoomEvent.Reconnecting, onReconnecting);
+      room.off(RoomEvent.Reconnected, onReconnected);
+      room.off(RoomEvent.Disconnected, onRoomDisconnected);
+    };
+  }, [room]);
 
   // CRITICAL: Call room.startAudio() after room is connected.
   // This is LiveKit's built-in method to handle browser autoplay restrictions.
@@ -136,9 +186,17 @@ function CallRoom({ isMuted }: { isMuted: boolean }) {
       )}
 
       {isDisconnected && (
-        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-4 py-2">
-          <span className="w-2 h-2 rounded-full bg-red-500" />
-          Voice disconnected
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-4 py-2">
+            <span className="w-2 h-2 rounded-full bg-red-500" />
+            Voice disconnected
+          </div>
+          <button
+            onClick={onRetry}
+            className="text-sm text-violet-400 bg-violet-500/10 border border-violet-500/30 rounded-full px-4 py-2"
+          >
+            Retry voice connection
+          </button>
         </div>
       )}
 
@@ -197,6 +255,8 @@ export default function CallPage() {
 
   // LiveKit connection state for debugging
   const [lkConnected, setLkConnected] = useState(false);
+  const wasEverConnected = useRef(false);
+  const [connectKey, setConnectKey] = useState(0);
 
   // Stable bar heights so the sound wave doesn't flicker on re-render
   const barHeights = useRef<number[]>(
@@ -232,6 +292,7 @@ export default function CallPage() {
     (reason: string) => {
       if (!isMounted.current || endCallCalled.current) return;
       endCallCalled.current = true;
+      console.log('[CallPage] ending call, reason:', reason, 'matchId:', matchId);
       connectSocket().emit('end_match', { matchId, reason });
       clearMatch();
       setPostReason(reason as PostReason);
@@ -325,6 +386,7 @@ export default function CallPage() {
 
   return (
     <LiveKitRoom
+      key={connectKey}
       token={livekitToken}
       serverUrl={livekitUrl}
       connect={true}
@@ -338,6 +400,7 @@ export default function CallPage() {
         },
       }}
       onConnected={() => {
+        wasEverConnected.current = true;
         setLkConnected(true);
         console.log('[LiveKit] connected to room successfully');
         toast.success('Voice connected!');
@@ -347,8 +410,15 @@ export default function CallPage() {
         toast.error(`Voice error: ${err?.message || 'unknown'}`);
       }}
       onDisconnected={() => {
-        console.log('[LiveKit] disconnected from room');
-        handleEndCall('disconnected');
+        setLkConnected(false);
+        console.warn('[LiveKit] disconnected, wasEverConnected:', wasEverConnected.current);
+        if (!wasEverConnected.current) {
+          console.error('[LiveKit] NEVER connected — check URL, token, or network');
+          toast.error('Could not connect to voice server');
+        } else {
+          toast.error('Voice connection lost');
+        }
+        // Do NOT auto-end call — let user retry or let partner_disconnected handle it
       }}
     >
       <div className="flex-1 flex flex-col items-center px-4 py-8 max-w-md mx-auto w-full gap-6">
@@ -369,7 +439,13 @@ export default function CallPage() {
         </div>
 
         {/* Partner status + audio renderer */}
-        <CallRoom isMuted={isMuted} />
+        <CallRoom
+          isMuted={isMuted}
+          onRetry={() => {
+            wasEverConnected.current = false;
+            setConnectKey((k) => k + 1);
+          }}
+        />
 
         {/* Fix 1: Mini-game — was never rendered, game events from server went unhandled */}
         <div className="w-full">
@@ -417,6 +493,8 @@ export default function CallPage() {
           <p>Token: {livekitToken ? `${livekitToken.substring(0, 20)}... (${livekitToken.length} chars)` : 'MISSING'}</p>
           <p>LK Connected: {lkConnected ? 'YES' : 'NO'}</p>
           <p>Match: {matchId?.substring(0, 8)}</p>
+          <p>Connect Attempt: #{connectKey + 1}</p>
+          <p>Partner: {partnerId?.substring(0, 8) ?? 'none'}</p>
         </div>
       </div>
     </LiveKitRoom>
