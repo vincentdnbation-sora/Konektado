@@ -7,6 +7,7 @@ import { MatchmakingModule } from './matchmaking/matchmaking.module';
 import { VoiceModule } from './voice/voice.module';
 import { GameModule } from './game/game.module';
 import { ReportsModule } from './reports/reports.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -19,5 +20,6 @@ import { ReportsModule } from './reports/reports.module';
     GameModule,
     ReportsModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
