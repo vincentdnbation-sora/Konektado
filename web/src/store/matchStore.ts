@@ -6,35 +6,44 @@ const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL || 'wss://dating-app-46d
 interface MatchState {
   matchId: string | null;
   roomName: string | null;
+  partnerId: string | null;
   livekitToken: string | null;
   livekitUrl: string | null;
   queueStatus: 'idle' | 'queued' | 'matched';
-  setMatch: (data: Partial<{ matchId: string; roomName: string; token: string; livekitUrl: string }>) => void;
+  /** Last known geolocation — persisted so re-queue from call page includes location */
+  lastLocation: { lat: number; lng: number } | null;
+  setMatch: (data: { matchId: string; roomName: string; token: string; livekitUrl?: string; partnerId?: string }) => void;
   setQueueStatus: (status: 'idle' | 'queued' | 'matched') => void;
+  setLastLocation: (loc: { lat: number; lng: number } | null) => void;
   clearMatch: () => void;
 }
 
 export const useMatchStore = create<MatchState>((set) => ({
   matchId: null,
   roomName: null,
+  partnerId: null,
   livekitToken: null,
   livekitUrl: null,
   queueStatus: 'idle',
+  lastLocation: null,
 
-  setMatch: (data) => set((state) => ({
-    ...state,
-    matchId: data.matchId ?? state.matchId,
-    roomName: data.roomName ?? state.roomName,
-    livekitToken: data.token ?? state.livekitToken,
-    livekitUrl: data.livekitUrl ?? state.livekitUrl,
-    queueStatus: data.matchId ? 'matched' : state.queueStatus,
-  })),
+  setMatch: (data) => set({
+    matchId: data.matchId,
+    roomName: data.roomName,
+    partnerId: data.partnerId ?? null,
+    livekitToken: data.token,
+    livekitUrl: data.livekitUrl || LIVEKIT_URL,
+    queueStatus: 'matched',
+  }),
 
   setQueueStatus: (status) => set({ queueStatus: status }),
+
+  setLastLocation: (loc) => set({ lastLocation: loc }),
 
   clearMatch: () => set({
     matchId: null,
     roomName: null,
+    partnerId: null,
     livekitToken: null,
     livekitUrl: null,
     queueStatus: 'idle',

@@ -12,10 +12,11 @@ interface Props {
   isMuted: boolean;
   onMuteToggle: () => void;
   onEndCall: (reason: string) => void;
-  onNextMatch?: () => void;
+  /** Skip to next match instantly without going to post-call screen */
+  onNext: () => void;
 }
 
-export default function CallControls({ matchId, reportedId, isMuted, onMuteToggle, onEndCall, onNextMatch }: Props) {
+export default function CallControls({ matchId, reportedId, isMuted, onMuteToggle, onEndCall, onNext }: Props) {
   const [showReport, setShowReport] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -59,19 +60,6 @@ export default function CallControls({ matchId, reportedId, isMuted, onMuteToggl
           )}
         </button>
 
-        {/* Next Match */}
-        {onNextMatch && (
-          <button
-            onClick={onNextMatch}
-            className="w-14 h-14 rounded-full bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0 flex items-center justify-center transition-colors shadow-lg shadow-pink-500/30"
-            title="Next Match"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        )}
-
         {/* End call */}
         <button
           onClick={() => onEndCall('user_left')}
@@ -80,6 +68,17 @@ export default function CallControls({ matchId, reportedId, isMuted, onMuteToggl
         >
           <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 8.25l-4.5 4.5-4.5-4.5M3 16.5a16.458 16.458 0 0018 0" />
+          </svg>
+        </button>
+
+        {/* Next — skip to new match instantly */}
+        <button
+          onClick={onNext}
+          className="w-14 h-14 rounded-full border border-border bg-card hover:border-violet-500 hover:text-violet-400 flex items-center justify-center transition-colors"
+          title="Next match"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h18M13 6l6 6-6 6" />
           </svg>
         </button>
 

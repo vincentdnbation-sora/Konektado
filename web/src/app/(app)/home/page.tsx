@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useMatchStore } from '@/store/matchStore';
@@ -11,68 +11,60 @@ import { toast } from 'sonner';
 export default function HomePage() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const { queueStatus, setQueueStatus, setMatch } = useMatchStore();
-  const [locationStatus, setLocationStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  const { queueStatus, setQueueStatus, setMatch, setLastLocation } = useMatchStore();
+
+  // Preload geolocation in the background the moment the page mounts.
+  // By the time the user clicks the button, the position is usually ready.
+  const locationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const [locationStatus, setLocationStatus] = useState<'loading' | 'granted' | 'denied'>('loading');
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setLocationStatus('denied');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        locationRef.current = loc;
+        setLastLocation(loc); // persist in store so re-queue pages can use it
+        setLocationStatus('granted');
+      },
+      () => setLocationStatus('denied'),
+      { timeout: 5000, maximumAge: 60_000 },
+    );
+  }, [setLastLocation]);
 
   useEffect(() => {
     const socket = connectSocket();
 
-    socket.on('queue_status', ({ status }: { status: string }) => {
-      if (status === 'queued') setQueueStatus('queued');
-      if (status === 'left') setQueueStatus('idle');
-    });
+    // Named reference so socket.off removes exactly this handler, not all listeners
+    const onMatchFound = (data: any) => {
+      setMatch(data);
+      toast.success('Match found! Starting voice call...');
+      router.push(`/call/${data.matchId}`);
+    };
 
-    socket.on('partner_disconnected', (data: any) => {
-      toast.error('Your partner disconnected. Finding someone new...');
-      // Automatically re-queue
-      joinWithLocation();
-    });
-
-    socket.on('match_ready', (data: any) => {
-      // Update match with real tokens
-      setMatch({
-        matchId: data.matchId,
-        token: data.token,
-      });
-    });
+    socket.on('match_found', onMatchFound);
 
     return () => {
-      socket.off('queue_status');
-      socket.off('match_found');
+      socket.off('match_found', onMatchFound);
     };
-  }, []);
-
-  function joinWithLocation(lat?: number, lng?: number) {
-    const socket = connectSocket();
-    socket.emit('join_queue', {
-      lat,
-      lng,
-      preferences: user?.preferences || {},
-    });
-    // Don't navigate immediately - stay on home page with searching state
-    // Navigation will happen when match_found event is received
-  }
+  }, [setMatch, router]);
 
   function handleJoinQueue() {
-    // Immediately set searching state - no navigation delay
+    const socket = connectSocket();
+    const loc = locationRef.current;
+
+    // Emit join_queue immediately — do not wait for geolocation if still pending
+    socket.emit('join_queue', {
+      lat: loc?.lat,
+      lng: loc?.lng,
+      preferences: user?.preferences || {},
+    });
+
     setQueueStatus('queued');
-
-    if (!navigator.geolocation) {
-      joinWithLocation();
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocationStatus('granted');
-        joinWithLocation(pos.coords.latitude, pos.coords.longitude);
-      },
-      () => {
-        setLocationStatus('denied');
-        joinWithLocation();
-      },
-      { timeout: 1000 }, // Faster timeout for instant feel
-    );
+    router.push('/queue');
   }
 
   function handleLeaveQueue() {
@@ -111,29 +103,14 @@ export default function HomePage() {
           Find Someone to Talk To
         </Button>
       ) : (
-        <div className="flex flex-col items-center gap-6">
-          <div className="relative w-20 h-20 flex items-center justify-center">
-            <div className="absolute inset-0 rounded-full bg-pink-500/10 animate-ping" style={{ animationDuration: '1s' }} />
-            <div className="absolute inset-2 rounded-full bg-violet-500/10 animate-ping" style={{ animationDuration: '1s', animationDelay: '0.3s' }} />
-            <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center shadow-xl shadow-pink-500/30">
-              <svg className="w-6 h-6 text-white animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-              </svg>
-            </div>
-          </div>
-          <div className="text-center">
-            <h3 className="text-xl font-semibold mb-2">Finding your match...</h3>
-            <p className="text-muted-foreground text-sm">Looking for someone ready to talk</p>
-          </div>
-          <Button
-            onClick={handleLeaveQueue}
-            size="lg"
-            variant="outline"
-            className="rounded-full px-8"
-          >
-            Cancel
-          </Button>
-        </div>
+        <Button
+          onClick={handleLeaveQueue}
+          size="lg"
+          variant="outline"
+          className="h-16 px-12 text-lg rounded-full"
+        >
+          Cancel Search
+        </Button>
       )}
 
       <div className="mt-12 grid grid-cols-3 gap-4 w-full text-sm text-muted-foreground">

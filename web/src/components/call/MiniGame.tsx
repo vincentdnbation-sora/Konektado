@@ -54,11 +54,13 @@ export default function MiniGame({ matchId, userId }: Props) {
   useEffect(() => {
     const socket = connectSocket();
 
-    socket.on('jump_game_start', (data: { totalRounds: number; lives: number; windowMs: number }) => {
+    // Fix 2: use named handler references so socket.off removes exactly these
+    // listeners and not every listener registered for these events globally.
+    const onGameStart = (data: { totalRounds: number; lives: number; windowMs: number }) => {
       setGame((g) => ({ ...g, phase: 'ready', totalRounds: data.totalRounds, lives: data.lives, windowMs: data.windowMs }));
-    });
+    };
 
-    socket.on('jump_game_round', (data: { round: number; totalRounds: number; windowMs: number }) => {
+    const onGameRound = (data: { round: number; totalRounds: number; windowMs: number }) => {
       setMyChar('idle');
       setPartnerChar('idle');
       setGame((g) => ({
@@ -73,9 +75,9 @@ export default function MiniGame({ matchId, userId }: Props) {
         lastSuccess: undefined,
       }));
       startCountdown(data.windowMs);
-    });
+    };
 
-    socket.on('jump_game_player_jumped', (data: { userId: string }) => {
+    const onPlayerJumped = (data: { userId: string }) => {
       if (data.userId === userId) {
         setMyChar('jump');
         setGame((g) => ({ ...g, myJumped: true }));
@@ -85,27 +87,33 @@ export default function MiniGame({ matchId, userId }: Props) {
         setGame((g) => ({ ...g, partnerJumped: true }));
         setTimeout(() => setPartnerChar('idle'), 600);
       }
-    });
+    };
 
-    socket.on('jump_game_result', (data: { success: boolean; lives: number; score: number; round: number }) => {
+    const onGameResult = (data: { success: boolean; lives: number; score: number; round: number }) => {
       if (countdownRef.current) clearInterval(countdownRef.current);
       if (!data.success) { setMyChar('fall'); setPartnerChar('fall'); }
       setGame((g) => ({ ...g, phase: 'result', lives: data.lives, score: data.score, lastSuccess: data.success }));
-    });
+    };
 
-    socket.on('jump_game_over', (data: { won: boolean; score: number; totalRounds: number }) => {
+    const onGameOver = (data: { won: boolean; score: number; totalRounds: number }) => {
       if (countdownRef.current) clearInterval(countdownRef.current);
       setMyChar('idle');
       setPartnerChar('idle');
       setGame((g) => ({ ...g, phase: 'complete', score: data.score, won: data.won }));
-    });
+    };
+
+    socket.on('jump_game_start', onGameStart);
+    socket.on('jump_game_round', onGameRound);
+    socket.on('jump_game_player_jumped', onPlayerJumped);
+    socket.on('jump_game_result', onGameResult);
+    socket.on('jump_game_over', onGameOver);
 
     return () => {
-      socket.off('jump_game_start');
-      socket.off('jump_game_round');
-      socket.off('jump_game_player_jumped');
-      socket.off('jump_game_result');
-      socket.off('jump_game_over');
+      socket.off('jump_game_start', onGameStart);
+      socket.off('jump_game_round', onGameRound);
+      socket.off('jump_game_player_jumped', onPlayerJumped);
+      socket.off('jump_game_result', onGameResult);
+      socket.off('jump_game_over', onGameOver);
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
   }, [userId, startCountdown]);
