@@ -1,4 +1,5 @@
 import { IsEmail, IsString, MinLength, IsInt, Min, Max, IsIn } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class RegisterDto {
   @IsEmail()
@@ -12,6 +13,7 @@ export class RegisterDto {
   @MinLength(2)
   displayName: string;
 
+  @Type(() => Number)
   @IsInt()
   @Min(18)
   @Max(100)
