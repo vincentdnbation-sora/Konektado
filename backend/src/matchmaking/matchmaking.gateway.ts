@@ -205,4 +205,54 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     if (!userId || !data.matchId || data.cardIndex == null) return;
     handleMemoryFlip(data.matchId, userId, data.cardIndex, this.server);
   }
+
+  // ── Game invitation system ──
+
+  @SubscribeMessage('game:invite')
+  handleGameInvite(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string; partnerId: string; gameId: string; gameTitle: string },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.matchId || !data.partnerId || !data.gameId) return;
+    this.logger.log(`[game:invite] ${userId} → ${data.partnerId} game=${data.gameId} match=${data.matchId}`);
+    this.server.to(`user:${data.partnerId}`).emit('game:invite', {
+      matchId: data.matchId,
+      fromUserId: userId,
+      gameId: data.gameId,
+      gameTitle: data.gameTitle,
+    });
+  }
+
+  @SubscribeMessage('game:accept')
+  handleGameAccept(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string; partnerId: string; gameId: string; gameTitle: string },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.matchId || !data.partnerId || !data.gameId) return;
+    this.logger.log(`[game:accept] ${userId} accepted ${data.gameId} match=${data.matchId}`);
+    // Notify both players
+    this.server.to(`user:${userId}`).to(`user:${data.partnerId}`).emit('game:accepted', {
+      matchId: data.matchId,
+      gameId: data.gameId,
+      gameTitle: data.gameTitle,
+      acceptedBy: userId,
+    });
+  }
+
+  @SubscribeMessage('game:decline')
+  handleGameDecline(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string; partnerId: string; gameId: string },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.matchId || !data.partnerId) return;
+    this.logger.log(`[game:decline] ${userId} declined ${data.gameId} match=${data.matchId}`);
+    this.server.to(`user:${data.partnerId}`).emit('game:declined', {
+      matchId: data.matchId,
+      gameId: data.gameId,
+      declinedBy: userId,
+    });
+  }
 }

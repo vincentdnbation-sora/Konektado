@@ -19,6 +19,8 @@ import '@livekit/components-styles';
 import CallControls from '@/components/call/CallControls';
 import MiniGame from '@/components/call/MiniGame';
 import MemoryGame from '@/components/call/MemoryGame';
+import { GameSheet, GameInviteOverlay, GAME_CATALOG } from '@/components/call/GameSheet';
+import type { InviteStatus } from '@/components/call/GameSheet';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
@@ -282,7 +284,11 @@ export default function CallPage() {
   const [lkConnected, setLkConnected] = useState(false);
   const wasEverConnected = useRef(false);
   const [connectKey, setConnectKey] = useState(0);
-  const [activeGame, setActiveGame] = useState<'jump' | 'memory'>('memory');
+
+  // Game selection system
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [inviteStatus, setInviteStatus] = useState<InviteStatus>({ type: 'idle' });
+  const [activeGame, setActiveGame] = useState<string | null>(null);
 
   // Mic permission gate: user must tap to grant mic before LiveKit connects
   const [micApproved, setMicApproved] = useState(false);
@@ -368,10 +374,36 @@ export default function CallPage() {
       setPhase('post');
     };
 
+    // Game invitation events
+    const onGameInvite = (data: { matchId: string; fromUserId: string; gameId: string; gameTitle: string }) => {
+      console.log('[CallPage] game:invite received', data);
+      setInviteStatus({ type: 'received', gameId: data.gameId, gameTitle: data.gameTitle, fromUserId: data.fromUserId });
+    };
+    const onGameAccepted = (data: { gameId: string; gameTitle: string }) => {
+      console.log('[CallPage] game:accepted', data);
+      setInviteStatus({ type: 'accepted', gameId: data.gameId, gameTitle: data.gameTitle });
+      setActiveGame(data.gameId);
+      setSheetOpen(false);
+      toast.success(`Starting ${data.gameTitle}!`);
+    };
+    const onGameDeclined = (data: { gameId: string }) => {
+      console.log('[CallPage] game:declined', data);
+      setInviteStatus({ type: 'declined', gameId: data.gameId });
+      const game = GAME_CATALOG.find((g) => g.id === data.gameId);
+      toast('Invite declined', { description: `Partner passed on ${game?.title ?? 'the game'}` });
+      setTimeout(() => setInviteStatus({ type: 'idle' }), 2000);
+    };
+
     socket.on('partner_disconnected', onPartnerDisconnected);
+    socket.on('game:invite', onGameInvite);
+    socket.on('game:accepted', onGameAccepted);
+    socket.on('game:declined', onGameDeclined);
 
     return () => {
       socket.off('partner_disconnected', onPartnerDisconnected);
+      socket.off('game:invite', onGameInvite);
+      socket.off('game:accepted', onGameAccepted);
+      socket.off('game:declined', onGameDeclined);
     };
   }, [clearMatch]);
 
@@ -617,36 +649,55 @@ export default function CallPage() {
           }}
         />
 
-        {/* Fix 1: Mini-games — game selector tabs + active game */}
+        {/* Game area — shows active game or "Play a Game" button */}
         <div className="w-full space-y-2">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setActiveGame('memory')}
-              className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-colors ${
-                activeGame === 'memory'
-                  ? 'bg-violet-500/15 text-violet-400 border border-violet-500/30'
-                  : 'bg-muted/40 text-muted-foreground border border-border'
-              }`}
-            >
-              🃏 Memory
-            </button>
-            <button
-              onClick={() => setActiveGame('jump')}
-              className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-colors ${
-                activeGame === 'jump'
-                  ? 'bg-violet-500/15 text-violet-400 border border-violet-500/30'
-                  : 'bg-muted/40 text-muted-foreground border border-border'
-              }`}
-            >
-              🏃 Jump
-            </button>
-          </div>
           {activeGame === 'memory' ? (
-            <MemoryGame matchId={matchId} userId={user?.id ?? ''} partnerId={partnerId ?? ''} />
-          ) : (
+            <MemoryGame matchId={matchId} userId={user?.id ?? ''} partnerId={partnerId ?? ''} autoStart />
+          ) : activeGame === 'jump' ? (
             <MiniGame matchId={matchId} userId={user?.id ?? ''} />
+          ) : (
+            <button
+              onClick={() => setSheetOpen(true)}
+              className="w-full py-4 rounded-2xl border border-border bg-card text-center space-y-1 active:scale-[.98] transition-transform"
+            >
+              <span className="text-2xl">🎮</span>
+              <p className="text-sm font-semibold">Play a Game</p>
+              <p className="text-[11px] text-muted-foreground">Choose a game to play together</p>
+            </button>
+          )}
+          {activeGame && (
+            <button
+              onClick={() => { setActiveGame(null); setInviteStatus({ type: 'idle' }); }}
+              className="w-full py-2 text-xs text-muted-foreground hover:text-foreground text-center transition-colors"
+            >
+              ← Back to game list
+            </button>
           )}
         </div>
+
+        {/* Game sheet + invite overlay — portaled outside scroll area */}
+        <GameSheet
+          open={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          matchId={matchId}
+          userId={user?.id ?? ''}
+          partnerId={partnerId ?? ''}
+          inviteStatus={inviteStatus}
+          onInviteSent={(gameId, gameTitle) => setInviteStatus({ type: 'sent', gameId, gameTitle })}
+        />
+        {inviteStatus.type === 'received' && (
+          <GameInviteOverlay
+            invite={inviteStatus}
+            matchId={matchId}
+            partnerId={partnerId ?? ''}
+            onAccept={() => {
+              // accepted — game:accepted event handler will set activeGame
+            }}
+            onDecline={() => {
+              setInviteStatus({ type: 'idle' });
+            }}
+          />
+        )}
 
         {/* Sound wave visualizer */}
         <div className="flex items-end justify-center gap-1 h-12 w-full">

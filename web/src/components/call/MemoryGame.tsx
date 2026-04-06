@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { connectSocket } from '@/lib/socket';
 
 interface Props {
   matchId: string;
   userId: string;
   partnerId: string;
+  autoStart?: boolean;
 }
 
 interface CardState {
@@ -30,12 +31,13 @@ interface GameState {
   secondFlip: number | null;
 }
 
-export default function MemoryGame({ matchId, userId, partnerId }: Props) {
+export default function MemoryGame({ matchId, userId, partnerId, autoStart }: Props) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [game, setGame] = useState<GameState | null>(null);
   const [lastMatch, setLastMatch] = useState<{ coord1: string; coord2: string; symbol: string } | null>(null);
   const [lastMismatch, setLastMismatch] = useState<{ coord1: string; coord2: string } | null>(null);
   const [endResult, setEndResult] = useState<{ turns: number; elapsedSeconds: number } | null>(null);
+  const autoStarted = useRef(false);
 
   // Clear flash effects after a short delay
   useEffect(() => {
@@ -152,6 +154,14 @@ export default function MemoryGame({ matchId, userId, partnerId }: Props) {
     console.log('[MemoryGame] requesting start', { matchId, partnerId });
     connectSocket().emit('memory:start', { matchId, partnerId });
   }, [matchId, partnerId]);
+
+  // Auto-start when launched via game invitation system
+  useEffect(() => {
+    if (autoStart && !autoStarted.current && phase === 'idle') {
+      autoStarted.current = true;
+      handleStartGame();
+    }
+  }, [autoStart, phase, handleStartGame]);
 
   const handleFlip = useCallback(
     (cardIndex: number) => {
