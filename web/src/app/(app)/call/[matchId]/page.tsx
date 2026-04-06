@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useMatchStore } from '@/store/matchStore';
@@ -9,69 +9,49 @@ import { LiveKitRoom, useLocalParticipant, useRemoteParticipants } from '@liveki
 import '@livekit/components-styles';
 import CallControls from '@/components/call/CallControls';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
-function AudioSetup({ isMuted }: { isMuted: boolean }) {
+function CallRoom({ isMuted, onMuteChange }: { isMuted: boolean; onMuteChange: (v: boolean) => void }) {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
-  const [audioUnlocked, setAudioUnlocked] = useState(false);
-  const [partnerConnected, setPartnerConnected] = useState(false);
+  const partnerConnected = remoteParticipants.length > 0;
+  const micEnabled = useRef(false);
 
-  // Track partner connection
+  // Enable mic as soon as localParticipant is available — no tap required
   useEffect(() => {
-    setPartnerConnected(remoteParticipants.length > 0);
-  }, [remoteParticipants]);
+    if (!localParticipant || micEnabled.current) return;
+    micEnabled.current = true;
 
-  // Enable mic whenever localParticipant is ready or mute changes
+    // Unlock AudioContext first (needed on iOS Safari)
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      ctx.resume();
+    } catch {}
+
+    localParticipant.setMicrophoneEnabled(true).catch(() => {});
+  }, [localParticipant]);
+
+  // Sync mute state
   useEffect(() => {
-    if (!localParticipant) return;
+    if (!localParticipant || !micEnabled.current) return;
     localParticipant.setMicrophoneEnabled(!isMuted).catch(() => {});
   }, [isMuted, localParticipant]);
 
-  // iOS Safari audio unlock overlay
-  if (!audioUnlocked) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-sm">
-        <div className="text-center space-y-5 px-8 max-w-xs">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center mx-auto text-3xl shadow-lg shadow-pink-500/30">
-            🎙️
-          </div>
-          <div>
-            <p className="font-bold text-lg">Tap to start your call</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Your browser needs a tap to activate the microphone
-            </p>
-          </div>
-          <Button
-            onClick={() => {
-              // Unlock AudioContext (required on iOS Safari)
-              try {
-                const ctx = new AudioContext();
-                ctx.resume();
-              } catch {}
-              setAudioUnlocked(true);
-              if (localParticipant) {
-                localParticipant.setMicrophoneEnabled(true).catch(() => {});
-              }
-            }}
-            className="w-full h-14 text-lg bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
-          >
-            Start Call
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <>
-      {/* Partner connection status */}
-      <div className={`fixed top-20 left-0 right-0 flex justify-center z-10 transition-all duration-500 ${partnerConnected ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <div className="bg-card border border-border rounded-full px-4 py-2 text-sm text-muted-foreground flex items-center gap-2">
+    <div className="w-full flex flex-col items-center gap-2">
+      {!partnerConnected && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-card border border-border rounded-full px-4 py-2">
           <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-          Waiting for partner to connect...
+          Connecting partner...
         </div>
-      </div>
-    </>
+      )}
+      {partnerConnected && (
+        <div className="flex items-center gap-2 text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-full px-4 py-2">
+          <span className="w-2 h-2 rounded-full bg-green-500" />
+          Partner connected — just talk!
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -90,9 +70,35 @@ export default function CallPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleEndCall = useCallback((reason: string) => {
+  useEffect(() => {
     const socket = connectSocket();
-    socket.emit('end_match', { matchId, reason });
+    socket.on('partner_disconnected', (data: any) => {
+      toast.error('Your partner disconnected');
+      clearMatch();
+      router.push('/home');
+    });
+    return () => {
+      socket.off('partner_disconnected');
+    };
+  }, [clearMatch, router]);
+
+  const handleNextMatch = useCallback(() => {
+    // End current match and immediately join queue
+    connectSocket().emit('end_match', { matchId, reason: 'next_match' });
+    clearMatch();
+    // Immediately join queue again - no navigation to home
+    const socket = connectSocket();
+    socket.emit('join_queue', {
+      lat: undefined, // Will fallback to global
+      lng: undefined,
+      preferences: user?.preferences || {},
+    });
+    // Navigate to home to show searching state
+    router.push('/home');
+  }, [matchId, clearMatch, user?.preferences, router]);
+
+  const handleEndCall = useCallback((reason: string) => {
+    connectSocket().emit('end_match', { matchId, reason });
     clearMatch();
     setPhase('post');
   }, [matchId, clearMatch]);
@@ -105,9 +111,7 @@ export default function CallPage() {
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center min-h-[80vh] max-w-sm mx-auto">
         <div className="text-6xl mb-6">👋</div>
         <h2 className="text-2xl font-bold mb-2">Call ended</h2>
-        <p className="text-muted-foreground mb-8">
-          You talked for {mins}m {secs}s
-        </p>
+        <p className="text-muted-foreground mb-8">You talked for {mins}m {secs}s</p>
         <div className="flex flex-col gap-3 w-full">
           <Button
             onClick={() => { clearMatch(); router.push('/home'); }}
@@ -115,9 +119,7 @@ export default function CallPage() {
           >
             Find Another Match
           </Button>
-          <Button variant="outline" onClick={() => router.push('/home')}>
-            Go Home
-          </Button>
+          <Button variant="outline" onClick={() => router.push('/home')}>Go Home</Button>
         </div>
       </div>
     );
@@ -141,34 +143,41 @@ export default function CallPage() {
       connect={true}
       audio={true}
       video={false}
+      options={{
+        audioCaptureDefaults: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      }}
       onDisconnected={() => handleEndCall('disconnected')}
     >
-      <AudioSetup isMuted={isMuted} />
-
       <div className="flex-1 flex flex-col items-center px-4 py-8 max-w-md mx-auto w-full gap-8">
-        {/* Call status */}
-        <div className="text-center w-full pt-4">
+        {/* Live indicator */}
+        <div className="text-center w-full">
           <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card border border-border rounded-full px-4 py-1.5 mb-6">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
             </span>
-            Live · {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
+            {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
           </div>
 
           <div className="w-24 h-24 rounded-full bg-gradient-to-br from-violet-500 to-pink-600 flex items-center justify-center mx-auto mb-4 text-4xl shadow-xl shadow-violet-500/20">
             ?
           </div>
           <h2 className="font-semibold text-xl">Someone nearby</h2>
-          <p className="text-sm text-muted-foreground mt-1">Voice call in progress — just talk!</p>
         </div>
 
-        {/* Animated sound wave */}
+        {/* Partner status */}
+        <CallRoom isMuted={isMuted} onMuteChange={setIsMuted} />
+
+        {/* Sound wave */}
         <div className="flex items-end justify-center gap-1 h-16 w-full">
           {Array.from({ length: 28 }).map((_, i) => (
             <div
               key={i}
-              className={`w-1.5 rounded-full ${isMuted ? 'bg-muted opacity-40' : 'bg-gradient-to-t from-pink-500 to-violet-500'}`}
+              className={`w-1.5 rounded-full ${isMuted ? 'bg-muted/40' : 'bg-gradient-to-t from-pink-500 to-violet-500'}`}
               style={{
                 height: `${15 + Math.random() * 85}%`,
                 animation: isMuted ? 'none' : `pulse ${0.4 + Math.random() * 0.5}s ease-in-out ${i * 0.03}s infinite alternate`,
@@ -179,12 +188,14 @@ export default function CallPage() {
         </div>
 
         {isMuted && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-sm text-red-400 text-center w-full">
-            🔇 You are muted — tap the mic button to unmute
-          </div>
+          <button
+            onClick={() => setIsMuted(false)}
+            className="bg-red-500/10 border border-red-500/30 rounded-xl px-5 py-3 text-sm text-red-400 w-full text-center"
+          >
+            🔇 You are muted — tap to unmute
+          </button>
         )}
 
-        {/* Controls */}
         <div className="w-full mt-auto">
           <CallControls
             matchId={matchId}
@@ -192,6 +203,7 @@ export default function CallPage() {
             isMuted={isMuted}
             onMuteToggle={() => setIsMuted((m) => !m)}
             onEndCall={handleEndCall}
+            onNextMatch={handleNextMatch}
           />
         </div>
       </div>

@@ -12,9 +12,10 @@ interface Props {
   isMuted: boolean;
   onMuteToggle: () => void;
   onEndCall: (reason: string) => void;
+  onNextMatch?: () => void;
 }
 
-export default function CallControls({ matchId, reportedId, isMuted, onMuteToggle, onEndCall }: Props) {
+export default function CallControls({ matchId, reportedId, isMuted, onMuteToggle, onEndCall, onNextMatch }: Props) {
   const [showReport, setShowReport] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -57,6 +58,19 @@ export default function CallControls({ matchId, reportedId, isMuted, onMuteToggl
             </svg>
           )}
         </button>
+
+        {/* Next Match */}
+        {onNextMatch && (
+          <button
+            onClick={onNextMatch}
+            className="w-14 h-14 rounded-full bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0 flex items-center justify-center transition-colors shadow-lg shadow-pink-500/30"
+            title="Next Match"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        )}
 
         {/* End call */}
         <button

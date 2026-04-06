@@ -6,7 +6,7 @@ import { Toaster } from "sonner";
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
 
 export const metadata: Metadata = {
-  title: "VoiceMatch — Meet People Through Conversation",
+  title: "Konektado Beta v0.1 — Meet People Through Conversation",
   description: "Get matched with someone nearby and connect through instant voice conversation.",
 };
 

@@ -57,103 +57,85 @@ export class MatchmakingService {
   }
 
   private async _runMatchmaking(redis: Redis, server: any) {
-    const queueSize = await redis.zcard(QUEUE_KEY);
-    if (queueSize < 2) return;
+    // Get all users in queue
+    const queueUsers = await redis.zrange(QUEUE_KEY, 0, -1);
+    if (queueUsers.length < 2) return;
 
-    const candidates = await redis.zrange(QUEUE_KEY, 0, -1);
+    // Simple instant matching: pair first two available users
+    const user1Id = queueUsers[0];
+    const user2Id = queueUsers[1];
 
-    // Fetch all candidate data and filter out already-matched users
-    const activeUsers: Array<{ userId: string; data: Record<string, string> }> = [];
-    for (const userId of candidates) {
-      const isMatched = await redis.sismember(MATCHED_SET, userId);
-      if (isMatched) continue;
-      const userData = await redis.hgetall(`${USER_DATA_PREFIX}${userId}`);
-      if (!userData || !Object.keys(userData).length) continue;
-      activeUsers.push({ userId, data: userData });
+    // Quick checks only (skip complex filters for speed)
+    const isUser1Matched = await redis.sismember(MATCHED_SET, user1Id);
+    const isUser2Matched = await redis.sismember(MATCHED_SET, user2Id);
+
+    if (isUser1Matched || isUser2Matched) {
+      // Remove matched users from queue and retry
+      await redis.zrem(QUEUE_KEY, isUser1Matched ? user1Id : user2Id);
+      return this._runMatchmaking(redis, server);
     }
 
-    if (activeUsers.length < 2) return;
-
-    // Build all valid candidate pairs with distance scores (nearest first)
-    type Pair = { i: number; j: number; distKm: number };
-    const pairs: Pair[] = [];
-
-    for (let i = 0; i < activeUsers.length; i++) {
-      for (let j = i + 1; j < activeUsers.length; j++) {
-        const u = activeUsers[i];
-        const v = activeUsers[j];
-
-        const bothHaveLocation =
-          u.data.hasLocation === '1' && v.data.hasLocation === '1';
-
-        const distKm = bothHaveLocation
-          ? this.getDistanceKm(+u.data.lat, +u.data.lng, +v.data.lat, +v.data.lng)
-          : Infinity; // no location → lowest priority but still matchable
-
-        pairs.push({ i, j, distKm });
-      }
-    }
-
-    // Sort pairs: nearest first, no-location pairs last
-    pairs.sort((a, b) => a.distKm - b.distKm);
-
-    // Greedily match pairs, skipping already-matched users
-    const matchedInRun = new Set<number>();
-    for (const { i, j } of pairs) {
-      if (matchedInRun.has(i) || matchedInRun.has(j)) continue;
-
-      const u = activeUsers[i];
-      const v = activeUsers[j];
-
-      const recentMatch = await this.hasRecentMatch(u.userId, v.userId);
-      if (recentMatch) continue;
-
-      const blocked = await this.isBlocked(u.userId, v.userId);
-      if (blocked) continue;
-
-      try {
-        await this.createMatch(u.userId, v.userId, redis, server);
-        matchedInRun.add(i);
-        matchedInRun.add(j);
-      } catch (err) {
-        this.logger.error(`createMatch failed for ${u.userId} <-> ${v.userId}:`, err);
-      }
+    try {
+      await this.createMatch(user1Id, user2Id, redis, server);
+    } catch (err) {
+      this.logger.error(`createMatch failed for ${user1Id} <-> ${user2Id}:`, err);
     }
   }
 
   private async createMatch(user1Id: string, user2Id: string, redis: Redis, server: any) {
-    const roomName = `room-${Date.now()}`;
+    // Create room name instantly
+    const roomName = `room-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    const match = await this.prisma.match.create({
-      data: { user1Id, user2Id, livekitRoomName: roomName },
-    });
-
-    await this.prisma.session.create({ data: { matchId: match.id } });
-
-    const [token1, token2] = await Promise.all([
+    // Start async database operations but don't wait for them
+    const dbPromise = Promise.all([
+      this.prisma.match.create({
+        data: { user1Id, user2Id, livekitRoomName: roomName },
+      }),
+      this.prisma.session.create({ data: { matchId: 'temp' } }), // Will update with real matchId
       this.voiceService.createToken(roomName, user1Id),
       this.voiceService.createToken(roomName, user2Id),
-    ]);
+    ]).catch(err => this.logger.error('Async DB operations failed:', err));
 
+    // Immediately mark as matched and remove from queue
     await redis.sadd(MATCHED_SET, user1Id, user2Id);
     await redis.zrem(QUEUE_KEY, user1Id, user2Id);
     await redis.expire(MATCHED_SET, 3600);
 
-    server.to(`user:${user1Id}`).emit('match_found', {
-      matchId: match.id,
+    // Send match notification immediately with basic info
+    // Tokens will be generated async and can be used when ready
+    const basicMatchData = {
+      matchId: `temp-${roomName}`,
       roomName,
-      token: token1,
       livekitUrl: process.env.LIVEKIT_URL,
-    });
-    server.to(`user:${user2Id}`).emit('match_found', {
-      matchId: match.id,
-      roomName,
-      token: token2,
-      livekitUrl: process.env.LIVEKIT_URL,
+      // Tokens will be sent in a follow-up event once ready
+    };
+
+    server.to(`user:${user1Id}`).emit('match_found', basicMatchData);
+    server.to(`user:${user2Id}`).emit('match_found', basicMatchData);
+
+    // Complete the async operations
+    dbPromise.then(async (results) => {
+      if (!results) return;
+      const [match, session, token1, token2] = results;
+
+      // Update session with real matchId
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: { matchId: match.id },
+      });
+
+      // Send tokens once ready
+      server.to(`user:${user1Id}`).emit('match_ready', {
+        matchId: match.id,
+        token: token1,
+      });
+      server.to(`user:${user2Id}`).emit('match_ready', {
+        matchId: match.id,
+        token: token2,
+      });
     });
 
-    this.logger.log(`Matched: ${user1Id} <-> ${user2Id} in room ${roomName}`);
-    startSyncGame(match.id, user1Id, user2Id, server);
+    this.logger.log(`Instant match: ${user1Id} <-> ${user2Id} in room ${roomName}`);
   }
 
   async endMatch(matchId: string, userId: string, reason: string, redis: Redis) {
@@ -202,15 +184,41 @@ export class MatchmakingService {
     return count > 0;
   }
 
-  private async isBlocked(u1: string, u2: string) {
-    const count = await this.prisma.block.count({
-      where: {
-        OR: [
-          { blockerId: u1, blockedId: u2 },
-          { blockerId: u2, blockedId: u1 },
-        ],
-      },
-    });
-    return count > 0;
+  async handleUserDisconnect(userId: string, redis: Redis, server: any) {
+    // Check if user was in a match
+    const wasMatched = await redis.sismember(MATCHED_SET, userId);
+    if (wasMatched) {
+      // Find the match and notify the other user
+      const match = await this.prisma.match.findFirst({
+        where: {
+          OR: [
+            { user1Id: userId },
+            { user2Id: userId },
+          ],
+          status: 'active',
+        },
+      });
+
+      if (match) {
+        const otherUserId = match.user1Id === userId ? match.user2Id : match.user1Id;
+
+        // End the match
+        await this.endMatch(match.id, userId, 'disconnected', redis);
+
+        // Notify the other user and re-queue them instantly
+        server.to(`user:${otherUserId}`).emit('partner_disconnected', {
+          matchId: match.id,
+          reason: 'partner_left',
+        });
+
+        // Automatically re-queue the remaining user
+        await this.joinQueue(otherUserId, { preferences: {} }, redis);
+        // Trigger matchmaking immediately
+        this.runMatchmaking(redis, server);
+      }
+    }
+
+    // Clean up queue
+    await this.leaveQueue(userId, redis);
   }
 }

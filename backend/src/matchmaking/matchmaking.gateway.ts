@@ -42,10 +42,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     private matchmakingService: MatchmakingService,
     private jwtService: JwtService,
   ) {
-    // Fallback interval in case immediate trigger misses someone
-    this.matchInterval = setInterval(() => {
-      this.matchmakingService.runMatchmaking(this.redis, this.server);
-    }, 500);
+    // Remove interval - we'll trigger matchmaking instantly on join
   }
 
   async handleConnection(client: Socket) {
@@ -63,7 +60,11 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
 
   async handleDisconnect(client: Socket) {
     if (client.data.userId) {
-      await this.matchmakingService.leaveQueue(client.data.userId, this.redis);
+      await this.matchmakingService.handleUserDisconnect(
+        client.data.userId,
+        this.redis,
+        this.server,
+      );
     }
   }
 
@@ -75,7 +76,8 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       this.redis,
     );
     client.emit('queue_status', result);
-    // Immediately attempt to match instead of waiting for the interval
+
+    // Immediately attempt to match - this should happen instantly if another user is waiting
     this.matchmakingService.runMatchmaking(this.redis, this.server);
   }
 
