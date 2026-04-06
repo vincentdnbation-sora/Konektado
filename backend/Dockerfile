@@ -15,4 +15,5 @@ RUN pnpm run build
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "npx prisma migrate deploy; echo '=== Starting node ===' && node dist/main 2>&1; echo '=== Node exited with code:' $?"]
+RUN chmod +x start.sh
+CMD ["sh", "start.sh"]
