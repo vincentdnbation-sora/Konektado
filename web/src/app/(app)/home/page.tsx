@@ -53,16 +53,8 @@ export default function HomePage() {
   }, [setMatch, router]);
 
   function handleJoinQueue() {
-    const socket = connectSocket();
-    const loc = locationRef.current;
-
-    // Emit join_queue immediately — do not wait for geolocation if still pending
-    socket.emit('join_queue', {
-      lat: loc?.lat,
-      lng: loc?.lng,
-      preferences: user?.preferences || {},
-    });
-
+    // Just connect the socket and navigate — the queue page will emit join_queue
+    connectSocket();
     setQueueStatus('queued');
     router.push('/queue');
   }

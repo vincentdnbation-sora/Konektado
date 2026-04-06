@@ -1,36 +1,44 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMatchStore } from '@/store/matchStore';
+import { useAuthStore } from '@/store/authStore';
 import { connectSocket } from '@/lib/socket';
 import { Button } from '@/components/ui/button';
 
 export default function QueuePage() {
   const router = useRouter();
   const { setMatch, setQueueStatus, queueStatus } = useMatchStore();
+  const { user } = useAuthStore();
   const [seconds, setSeconds] = useState(0);
+  const joinedRef = useRef(false);
 
-  // Fix 6: if the user lands here without being in the queue (e.g. browser
-  // refresh resets Zustand state to 'idle'), redirect them home rather than
-  // leaving them stuck on the search screen with no active join_queue emit.
+  // On mount: always (re-)emit join_queue to ensure server-side queue state
+  // This handles: first visit, page refresh, and socket reconnect
   useEffect(() => {
-    if (queueStatus === 'idle') {
-      router.replace('/home');
-    }
-  // Only run on mount — queueStatus changes mid-session are handled by events
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => setSeconds((s) => s + 1), 1000);
     const socket = connectSocket();
 
-    // Named references so socket.off removes exactly these handlers (Bug 4/6 fix)
+    function emitJoin() {
+      if (joinedRef.current) return;
+      joinedRef.current = true;
+      socket.emit('join_queue', {
+        lat: useMatchStore.getState().lastLocation?.lat,
+        lng: useMatchStore.getState().lastLocation?.lng,
+        preferences: user?.preferences || {},
+      });
+      setQueueStatus('queued');
+    }
+
+    // Named handlers for clean removal
+    const onConnect = () => {
+      // Re-join queue on reconnect (server lost our state on disconnect)
+      joinedRef.current = false;
+      emitJoin();
+    };
+
     const onMatchFound = (data: any) => {
       setMatch(data);
-      // Navigate immediately — store is already updated so the call page
-      // has livekitToken/livekitUrl ready on first render.
       router.push(`/call/${data.matchId}`);
     };
 
@@ -38,18 +46,30 @@ export default function QueuePage() {
       if (status === 'left') {
         setQueueStatus('idle');
         router.push('/home');
+      } else if (status === 'error') {
+        setQueueStatus('idle');
+        router.push('/home');
       }
     };
 
+    socket.on('connect', onConnect);
     socket.on('match_found', onMatchFound);
     socket.on('queue_status', onQueueStatus);
 
+    // If already connected, join immediately
+    if (socket.connected) {
+      emitJoin();
+    }
+
+    const timer = setInterval(() => setSeconds((s) => s + 1), 1000);
+
     return () => {
       clearInterval(timer);
+      socket.off('connect', onConnect);
       socket.off('match_found', onMatchFound);
       socket.off('queue_status', onQueueStatus);
     };
-  }, [setMatch, setQueueStatus, router]);
+  }, [setMatch, setQueueStatus, router, user]);
 
   function handleCancel() {
     const socket = connectSocket();

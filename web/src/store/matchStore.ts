@@ -1,7 +1,30 @@
 import { create } from 'zustand';
 
-// Fallback to the env var if the backend didn't send the URL
 const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL || 'wss://dating-app-46dvc6ij.livekit.cloud';
+
+/** Restore match state from sessionStorage on refresh */
+function loadSessionState() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = sessionStorage.getItem('kk_match');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveSessionState(partial: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+  try {
+    const current = JSON.parse(sessionStorage.getItem('kk_match') || '{}');
+    sessionStorage.setItem('kk_match', JSON.stringify({ ...current, ...partial }));
+  } catch {}
+}
+
+function clearSessionState() {
+  if (typeof window === 'undefined') return;
+  sessionStorage.removeItem('kk_match');
+}
 
 interface MatchState {
   matchId: string | null;
@@ -10,7 +33,6 @@ interface MatchState {
   livekitToken: string | null;
   livekitUrl: string | null;
   queueStatus: 'idle' | 'queued' | 'matched';
-  /** Last known geolocation — persisted so re-queue from call page includes location */
   lastLocation: { lat: number; lng: number } | null;
   setMatch: (data: { matchId: string; roomName: string; token: string; livekitUrl?: string; partnerId?: string }) => void;
   setQueueStatus: (status: 'idle' | 'queued' | 'matched') => void;
@@ -18,34 +40,49 @@ interface MatchState {
   clearMatch: () => void;
 }
 
+const saved = loadSessionState();
+
 export const useMatchStore = create<MatchState>((set) => ({
-  matchId: null,
-  roomName: null,
-  partnerId: null,
-  livekitToken: null,
-  livekitUrl: null,
-  queueStatus: 'idle',
-  lastLocation: null,
+  matchId: saved.matchId ?? null,
+  roomName: saved.roomName ?? null,
+  partnerId: saved.partnerId ?? null,
+  livekitToken: saved.livekitToken ?? null,
+  livekitUrl: saved.livekitUrl ?? null,
+  queueStatus: saved.queueStatus ?? 'idle',
+  lastLocation: saved.lastLocation ?? null,
 
-  setMatch: (data) => set({
-    matchId: data.matchId,
-    roomName: data.roomName,
-    partnerId: data.partnerId ?? null,
-    livekitToken: data.token,
-    livekitUrl: data.livekitUrl || LIVEKIT_URL,
-    queueStatus: 'matched',
-  }),
+  setMatch: (data) => {
+    const state = {
+      matchId: data.matchId,
+      roomName: data.roomName,
+      partnerId: data.partnerId ?? null,
+      livekitToken: data.token,
+      livekitUrl: data.livekitUrl || LIVEKIT_URL,
+      queueStatus: 'matched' as const,
+    };
+    saveSessionState(state);
+    set(state);
+  },
 
-  setQueueStatus: (status) => set({ queueStatus: status }),
+  setQueueStatus: (status) => {
+    saveSessionState({ queueStatus: status });
+    set({ queueStatus: status });
+  },
 
-  setLastLocation: (loc) => set({ lastLocation: loc }),
+  setLastLocation: (loc) => {
+    saveSessionState({ lastLocation: loc });
+    set({ lastLocation: loc });
+  },
 
-  clearMatch: () => set({
-    matchId: null,
-    roomName: null,
-    partnerId: null,
-    livekitToken: null,
-    livekitUrl: null,
-    queueStatus: 'idle',
-  }),
+  clearMatch: () => {
+    clearSessionState();
+    set({
+      matchId: null,
+      roomName: null,
+      partnerId: null,
+      livekitToken: null,
+      livekitUrl: null,
+      queueStatus: 'idle',
+    });
+  },
 }));

@@ -27,13 +27,16 @@ function CallRoom({ isMuted }: { isMuted: boolean }) {
     if (!localParticipant || micEnabled.current) return;
     micEnabled.current = true;
 
-    // Unlock AudioContext first (required on iOS Safari)
+    // Unlock AudioContext (required on iOS Safari before any audio can play)
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      ctx.resume();
+      ctx.resume().catch(() => {});
     } catch {}
 
-    localParticipant.setMicrophoneEnabled(true).catch(() => {});
+    // Let LiveKit handle getUserMedia — avoid double permission prompts on mobile
+    localParticipant.setMicrophoneEnabled(true).catch((err) => {
+      console.warn('[CallRoom] mic enable failed:', err);
+    });
   }, [localParticipant]);
 
   useEffect(() => {

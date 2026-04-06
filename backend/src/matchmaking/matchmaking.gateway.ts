@@ -7,6 +7,7 @@ import {
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
+import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { MatchmakingService } from './matchmaking.service';
@@ -25,29 +26,30 @@ const ALLOWED_ORIGINS = [
       if (!origin || ALLOWED_ORIGINS.includes(origin)) {
         callback(null, true);
       } else {
+        console.error(`[WS-CORS] rejected origin: ${origin}`);
         callback(new Error(`CORS: ${origin} not allowed`));
       }
     },
     credentials: true,
   },
+  // Allow both websocket and polling for mobile browser compatibility
+  transports: ['websocket', 'polling'],
+  pingInterval: 10000,
+  pingTimeout: 15000,
 })
 export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
+  private readonly logger = new Logger(MatchmakingGateway.name);
+
   private redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
-  /**
-   * Fallback sweep interval — catches the rare race condition where two users
-   * joined simultaneously and both ended up waiting in the queue without
-   * matching each other. The hot path is purely event-driven via joinQueue.
-   * Kept at 200ms so the worst-case wait from a race condition is imperceptible.
-   */
   constructor(
     private matchmakingService: MatchmakingService,
     private jwtService: JwtService,
   ) {
-    // Store ref so Node.js doesn't GC the interval
+    // Fallback sweep — catches race condition where two users join simultaneously
     setInterval(() => {
       this.matchmakingService.runMatchmaking(this.redis, this.server);
     }, 200);
@@ -56,19 +58,26 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   async handleConnection(client: Socket) {
     try {
       const token = client.handshake.auth?.token;
+      if (!token) {
+        this.logger.warn(`[connect] no token — disconnecting ${client.id}`);
+        client.disconnect();
+        return;
+      }
       const payload = this.jwtService.verify(token, {
         secret: process.env.JWT_SECRET || 'secret',
       });
       client.data.userId = payload.sub;
       client.join(`user:${payload.sub}`);
-    } catch {
+      this.logger.log(`[connect] userId=${payload.sub} socketId=${client.id} transport=${client.conn.transport.name}`);
+    } catch (err: any) {
+      this.logger.warn(`[connect] auth failed: ${err.message} — disconnecting ${client.id}`);
       client.disconnect();
     }
   }
 
   async handleDisconnect(client: Socket) {
     if (!client.data.userId) return;
-    // Handles both queue cleanup and in-call partner notification
+    this.logger.log(`[disconnect] userId=${client.data.userId} socketId=${client.id}`);
     await this.matchmakingService.handleUserDisconnect(
       client.data.userId,
       this.redis,
@@ -81,18 +90,24 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     const userId = client.data.userId;
     if (!userId) return;
 
-    // Pass server so joinQueue can emit match_found immediately if a partner is found
-    const result = await this.matchmakingService.joinQueue(userId, data, this.redis, this.server);
+    this.logger.log(`[join_queue] userId=${userId}`);
 
-    // Only emit queue_status when actually queued — if matched, match_found was already sent
-    if (result.status === 'queued') {
-      client.emit('queue_status', { status: 'queued' });
+    try {
+      const result = await this.matchmakingService.joinQueue(userId, data, this.redis, this.server);
+
+      if (result.status === 'queued') {
+        client.emit('queue_status', { status: 'queued' });
+      }
+    } catch (err: any) {
+      this.logger.error(`[join_queue] error for userId=${userId}: ${err.message}`);
+      client.emit('queue_status', { status: 'error', message: err.message });
     }
   }
 
   @SubscribeMessage('leave_queue')
   async leaveQueue(@ConnectedSocket() client: Socket) {
     if (!client.data.userId) return;
+    this.logger.log(`[leave_queue] userId=${client.data.userId}`);
     await this.matchmakingService.leaveQueue(client.data.userId, this.redis);
     client.emit('queue_status', { status: 'left' });
   }
@@ -103,6 +118,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     @MessageBody() data: { matchId: string; reason: string },
   ) {
     if (!client.data.userId) return;
+    this.logger.log(`[end_match] userId=${client.data.userId} matchId=${data.matchId}`);
     cleanupGame(data.matchId);
     await this.matchmakingService.endMatch(
       data.matchId,
@@ -113,12 +129,6 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     );
   }
 
-  /**
-   * "Next" — user ends current call and immediately re-enters the queue.
-   * Designed to feel instant: the client navigates to the queue page at the same
-   * time this event fires, so by the time the new page loads, a match may already
-   * be waiting.
-   */
   @SubscribeMessage('next_match')
   async nextMatch(
     @ConnectedSocket() client: Socket,
@@ -127,10 +137,8 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     const userId = client.data.userId;
     if (!userId) return;
 
-    // End current match and notify the partner before re-queuing.
-    // Must be awaited so that the old match's MATCHED_SET entries are cleared in Redis
-    // before joinQueue does sadd for the new match — otherwise endMatch's srem could
-    // race and remove the user from their new match's MATCHED_SET entry.
+    this.logger.log(`[next_match] userId=${userId} matchId=${data.matchId}`);
+
     if (data.matchId) {
       cleanupGame(data.matchId);
       await this.matchmakingService.endMatch(
@@ -142,20 +150,21 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       );
     }
 
-    // Fix 3: pass the full join data (lat, lng, preferences) — previously only
-    // data.preferences was forwarded, which meant joinQueue received the preferences
-    // object as its `data` parameter instead of { lat, lng, preferences }.
-    const result = await this.matchmakingService.joinQueue(
-      userId,
-      { lat: data.lat, lng: data.lng, preferences: data.preferences || {} },
-      this.redis,
-      this.server,
-    );
+    try {
+      const result = await this.matchmakingService.joinQueue(
+        userId,
+        { lat: data.lat, lng: data.lng, preferences: data.preferences || {} },
+        this.redis,
+        this.server,
+      );
 
-    if (result.status === 'queued') {
-      client.emit('queue_status', { status: 'queued' });
+      if (result.status === 'queued') {
+        client.emit('queue_status', { status: 'queued' });
+      }
+    } catch (err: any) {
+      this.logger.error(`[next_match] error for userId=${userId}: ${err.message}`);
+      client.emit('queue_status', { status: 'error', message: err.message });
     }
-    // If 'matched', match_found was already emitted by joinQueue
   }
 
   @SubscribeMessage('game_jump')
