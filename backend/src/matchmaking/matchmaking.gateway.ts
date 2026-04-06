@@ -10,6 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { MatchmakingService } from './matchmaking.service';
+import { startSyncGame, handleJump, cleanupGame } from './sync-game';
 import Redis from 'ioredis';
 
 const ALLOWED_ORIGINS = [
@@ -92,5 +93,19 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       data.reason,
       this.redis,
     );
+    cleanupGame(data.matchId);
+  }
+
+  @SubscribeMessage('game_jump')
+  handleGameJump(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string },
+  ) {
+    handleJump(data.matchId, client.data.userId, this.server);
+  }
+
+  // Called by MatchmakingService after a match is created
+  startGameForMatch(matchId: string, user1Id: string, user2Id: string) {
+    startSyncGame(matchId, user1Id, user2Id, this.server);
   }
 }

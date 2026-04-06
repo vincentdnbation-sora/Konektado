@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
 import { VoiceService } from '../voice/voice.service';
+import { startSyncGame } from './sync-game';
 
 const QUEUE_KEY = 'matchmaking:queue';
 const USER_DATA_PREFIX = 'matchmaking:user:';
@@ -138,6 +139,7 @@ export class MatchmakingService {
     });
 
     this.logger.log(`Matched: ${user1Id} <-> ${user2Id} in room ${roomName}`);
+    startSyncGame(match.id, user1Id, user2Id, server);
   }
 
   async endMatch(matchId: string, userId: string, reason: string, redis: Redis) {
