@@ -29,4 +29,16 @@ async function bootstrap() {
   await app.listen(process.env.PORT || 3001);
   console.log(`Backend running on http://localhost:${process.env.PORT || 3001}`);
 }
-bootstrap();
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION:', reason);
+  process.exit(1);
+});
+
+bootstrap().catch((err) => {
+  console.error('BOOTSTRAP ERROR:', err);
+  process.exit(1);
+});
