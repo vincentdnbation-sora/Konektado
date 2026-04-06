@@ -21,6 +21,29 @@ import MiniGame from '@/components/call/MiniGame';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
+/** Detect in-app browsers that don't support getUserMedia properly */
+function detectInAppBrowser(): { isInApp: boolean; name: string } {
+  if (typeof navigator === 'undefined') return { isInApp: false, name: '' };
+  const ua = navigator.userAgent || '';
+  // Facebook Messenger / Facebook app
+  if (/FBAN|FBAV|FB_IAB/i.test(ua)) return { isInApp: true, name: 'Facebook' };
+  // Instagram
+  if (/Instagram/i.test(ua)) return { isInApp: true, name: 'Instagram' };
+  // LINE
+  if (/\bLine\//i.test(ua)) return { isInApp: true, name: 'LINE' };
+  // Twitter / X
+  if (/Twitter/i.test(ua)) return { isInApp: true, name: 'Twitter' };
+  // Snapchat
+  if (/Snapchat/i.test(ua)) return { isInApp: true, name: 'Snapchat' };
+  // TikTok
+  if (/TikTok|BytedanceWebview/i.test(ua)) return { isInApp: true, name: 'TikTok' };
+  // Generic webview detection (Android)
+  if (/wv\)|\bWebView\b/i.test(ua) && /Android/i.test(ua)) return { isInApp: true, name: 'in-app browser' };
+  return { isInApp: false, name: '' };
+}
+
+const MIC_REQUEST_TIMEOUT_MS = 10000;
+
 /**
  * Inner component — must be rendered inside <LiveKitRoom>.
  * Handles mic capture, remote audio playback, and connection status display.
@@ -263,19 +286,50 @@ export default function CallPage() {
   const [micApproved, setMicApproved] = useState(false);
   const [micDenied, setMicDenied] = useState(false);
   const [micRequesting, setMicRequesting] = useState(false);
+  const [micTimedOut, setMicTimedOut] = useState(false);
+
+  // In-app browser detection
+  const [inAppBrowser] = useState(() => detectInAppBrowser());
+
+  // Log browser info on mount
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    console.log('[CallPage] userAgent:', ua);
+    console.log('[CallPage] inAppBrowser:', inAppBrowser);
+  }, [inAppBrowser]);
 
   const requestMicPermission = useCallback(async () => {
     console.log('[CallPage] mic permission request started (user gesture)');
+    console.log('[CallPage] userAgent:', navigator.userAgent);
     setMicRequesting(true);
     setMicDenied(false);
+    setMicTimedOut(false);
+
+    // Race getUserMedia against a timeout
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      console.error('[CallPage] mic request TIMED OUT after', MIC_REQUEST_TIMEOUT_MS, 'ms');
+      setMicTimedOut(true);
+      setMicRequesting(false);
+      toast.error('Microphone request timed out — your browser may not support this');
+    }, MIC_REQUEST_TIMEOUT_MS);
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      clearTimeout(timeoutId);
+      if (timedOut) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       // Immediately stop the tracks — LiveKit will create its own
       stream.getTracks().forEach((t) => t.stop());
       console.log('[CallPage] mic permission granted');
       setMicApproved(true);
       toast.success('Microphone ready!');
     } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (timedOut) return;
       console.error('[CallPage] mic permission denied:', err?.name, err?.message);
       setMicDenied(true);
       if (err?.name === 'NotAllowedError') {
@@ -286,7 +340,7 @@ export default function CallPage() {
         toast.error(`Microphone error: ${err?.message || 'unknown'}`);
       }
     } finally {
-      setMicRequesting(false);
+      if (!timedOut) setMicRequesting(false);
     }
   }, []);
 
@@ -412,6 +466,49 @@ export default function CallPage() {
 
   // Show mic permission gate before connecting to LiveKit
   if (!micApproved) {
+    // In-app browser blocking screen
+    if (inAppBrowser.isInApp) {
+      const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center min-h-[60vh] max-w-sm mx-auto gap-5">
+          <div className="w-20 h-20 rounded-full bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-4xl">
+            ⚠️
+          </div>
+          <h2 className="text-xl font-bold">Unsupported Browser</h2>
+          <p className="text-muted-foreground text-sm">
+            Microphone access doesn&apos;t work inside {inAppBrowser.name}&apos;s built-in browser.
+            Please open this page in <strong>Chrome</strong> or <strong>Safari</strong>.
+          </p>
+          <div className="w-full space-y-3">
+            <Button
+              onClick={() => {
+                // Try intent:// for Android Chrome
+                if (/Android/i.test(navigator.userAgent)) {
+                  window.location.href = `intent://${currentUrl.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end;`;
+                } else {
+                  // Fallback: copy URL
+                  navigator.clipboard?.writeText(currentUrl).then(() => {
+                    toast.success('Link copied! Paste it in Chrome or Safari.');
+                  }).catch(() => {
+                    toast('Copy this URL and open in Chrome: ' + currentUrl);
+                  });
+                }
+              }}
+              className="bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0 rounded-full px-8 py-6 text-base w-full"
+            >
+              Open in Chrome
+            </Button>
+            <button
+              onClick={requestMicPermission}
+              className="text-sm text-muted-foreground hover:text-foreground w-full py-2"
+            >
+              Try anyway
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center min-h-[60vh] max-w-sm mx-auto gap-6">
         <div className="w-28 h-28 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center text-5xl shadow-xl shadow-pink-500/20">
@@ -426,12 +523,17 @@ export default function CallPage() {
             Microphone access was denied. Please check your browser settings and try again.
           </div>
         )}
+        {micTimedOut && (
+          <div className="text-sm text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3 w-full">
+            Microphone request timed out. Your browser may not support microphone access. Try opening in <strong>Chrome</strong>.
+          </div>
+        )}
         <Button
           onClick={requestMicPermission}
           disabled={micRequesting}
           className="bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0 rounded-full px-8 py-6 text-lg w-full"
         >
-          {micRequesting ? 'Requesting access...' : micDenied ? 'Retry Microphone' : 'Start Voice Chat'}
+          {micRequesting ? 'Requesting access...' : micDenied || micTimedOut ? 'Retry Microphone' : 'Start Voice Chat'}
         </Button>
         <button
           onClick={() => { handleEndCall('user_left'); }}
