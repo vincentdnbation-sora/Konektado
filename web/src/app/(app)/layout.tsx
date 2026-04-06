@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import FeedbackButton from '@/components/FeedbackButton';
 
@@ -23,7 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background flex flex-col">
       <nav className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-background/80 backdrop-blur-sm z-10">
         <Link href="/home" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm">K</div>
+          <Image src="/logo.jpg" alt="Konektado" width={32} height={32} className="rounded-full object-cover" />
           <span className="font-semibold text-lg tracking-tight">Konektado</span>
         </Link>
         <div className="flex items-center gap-3">

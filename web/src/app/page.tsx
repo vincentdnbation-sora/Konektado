@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import FeedbackButton from '@/components/FeedbackButton';
 
@@ -8,8 +9,9 @@ export default function LandingPage() {
       {/* Nav */}
       <nav className="flex items-center justify-between px-6 py-4 border-b border-border">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm">V</div>
-          <span className="font-semibold text-lg tracking-tight">VoiceMatch</span>
+          <Image src="/logo.jpg" alt="Konektado" width={32} height={32} className="rounded-full object-cover" />
+          <span className="font-semibold text-lg tracking-tight">Konektado</span>
+          <span className="text-xs font-medium bg-pink-500/10 text-pink-400 border border-pink-500/20 rounded-full px-2 py-0.5">Beta v0.1</span>
         </div>
         <div className="flex items-center gap-3">
           <Link href="/auth/login">
@@ -30,7 +32,7 @@ export default function LandingPage() {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
           </span>
-          Live matching available now
+          Beta v0.1 — Live matching available now
         </div>
 
         <h1 className="text-5xl sm:text-7xl font-bold tracking-tight mb-6 leading-tight">
@@ -41,7 +43,7 @@ export default function LandingPage() {
         </h1>
 
         <p className="text-lg text-muted-foreground max-w-xl mb-10 leading-relaxed">
-          Skip the swiping. VoiceMatch connects you with someone nearby instantly —
+          Skip the swiping. Konektado matches you with someone nearby instantly —
           you talk, play a mini-game together, and decide if you want to keep the connection.
         </p>
 
@@ -73,14 +75,19 @@ export default function LandingPage() {
           ))}
         </div>
 
+        {/* Beta notice */}
+        <div className="mt-12 rounded-2xl border border-pink-500/20 bg-pink-500/5 px-6 py-5 text-sm text-muted-foreground max-w-xl text-left">
+          <span className="font-medium text-pink-400">Beta v0.1 — We need your feedback!</span> This is an early version of Konektado. Use the feedback button to tell us what works, what doesn&apos;t, and what you&apos;d love to see next.
+        </div>
+
         {/* Safety note */}
-        <div className="mt-12 rounded-2xl border border-border bg-card px-6 py-5 text-sm text-muted-foreground max-w-xl text-left">
+        <div className="mt-4 rounded-2xl border border-border bg-card px-6 py-5 text-sm text-muted-foreground max-w-xl text-left">
           <span className="font-medium text-foreground">Your safety matters.</span> Every session has a report button and instant call-end. Blocked users never match again.
         </div>
       </main>
 
       <footer className="text-center py-6 text-xs text-muted-foreground border-t border-border">
-        © 2025 VoiceMatch · Built for real human connection
+        © 2025 Konektado Beta v0.1 · Built for real human connection
       </footer>
       <FeedbackButton />
     </div>
