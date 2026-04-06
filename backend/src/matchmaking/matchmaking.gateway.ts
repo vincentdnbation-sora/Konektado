@@ -12,7 +12,24 @@ import { JwtService } from '@nestjs/jwt';
 import { MatchmakingService } from './matchmaking.service';
 import Redis from 'ioredis';
 
-@WebSocketGateway({ cors: { origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true } })
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'https://konektado-beta.vercel.app',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+@WebSocketGateway({
+  cors: {
+    origin: (origin: string, callback: (err: Error | null, allow?: boolean) => void) => {
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: ${origin} not allowed`));
+      }
+    },
+    credentials: true,
+  },
+})
 export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
@@ -32,7 +49,9 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   async handleConnection(client: Socket) {
     try {
       const token = client.handshake.auth?.token;
-      const payload = this.jwtService.verify(token, { secret: process.env.JWT_SECRET });
+      const payload = this.jwtService.verify(token, {
+        secret: process.env.JWT_SECRET || 'secret',
+      });
       client.data.userId = payload.sub;
       client.join(`user:${payload.sub}`);
     } catch {
@@ -48,7 +67,11 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
 
   @SubscribeMessage('join_queue')
   async joinQueue(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
-    const result = await this.matchmakingService.joinQueue(client.data.userId, data, this.redis);
+    const result = await this.matchmakingService.joinQueue(
+      client.data.userId,
+      data,
+      this.redis,
+    );
     client.emit('queue_status', result);
   }
 
@@ -59,7 +82,15 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   }
 
   @SubscribeMessage('end_match')
-  async endMatch(@ConnectedSocket() client: Socket, @MessageBody() data: { matchId: string; reason: string }) {
-    await this.matchmakingService.endMatch(data.matchId, client.data.userId, data.reason, this.redis);
+  async endMatch(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string; reason: string },
+  ) {
+    await this.matchmakingService.endMatch(
+      data.matchId,
+      client.data.userId,
+      data.reason,
+      this.redis,
+    );
   }
 }

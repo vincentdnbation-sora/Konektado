@@ -1,95 +1,210 @@
-import Link from 'next/link';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import FeedbackButton from '@/components/FeedbackButton';
+import { Input } from '@/components/ui/input';
+import { useAuthStore } from '@/store/authStore';
+import api from '@/lib/api';
 
-export default function LandingPage() {
+const GENDERS = ['male', 'female', 'non-binary', 'other'] as const;
+
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+export default function OnboardPage() {
+  const router = useRouter();
+  const { token, setSession } = useAuthStore();
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({ username: '', age: '', gender: '' });
+
+  useEffect(() => {
+    if (token) router.replace('/home');
+  }, [token]);
+
+  async function handleFinish() {
+    if (!form.username.trim() || form.username.trim().length < 2) {
+      toast.error('Name must be at least 2 characters');
+      return;
+    }
+    const age = parseInt(form.age);
+    if (!age || age < 18 || age > 100) {
+      toast.error('Age must be between 18 and 100');
+      return;
+    }
+    if (!form.gender) {
+      toast.error('Please select your gender');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const userId = generateUUID();
+      const { data } = await api.post('/auth/anonymous', {
+        userId,
+        username: form.username.trim(),
+        age,
+        gender: form.gender,
+      });
+      setSession(data.token, data.user);
+      toast.success(`Welcome, ${data.user.profile?.displayName}!`);
+      router.push('/home');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Nav */}
-      <nav className="flex items-center justify-between px-6 py-4 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Image src="/logo.jpg" alt="Konektado" width={32} height={32} className="rounded-full object-cover" />
-          <span className="font-semibold text-lg tracking-tight">Konektado</span>
-          <span className="text-xs font-medium bg-pink-500/10 text-pink-400 border border-pink-500/20 rounded-full px-2 py-0.5">Beta v0.1</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/auth/login">
-            <Button variant="ghost" size="sm">Log in</Button>
-          </Link>
-          <Link href="/auth/register">
-            <Button size="sm" className="bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0">
-              Get Started
-            </Button>
-          </Link>
-        </div>
-      </nav>
-
-      {/* Hero */}
-      <main className="flex-1 flex flex-col items-center justify-center text-center px-6 py-24 max-w-4xl mx-auto">
-        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-1.5 text-sm text-muted-foreground mb-8">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-          </span>
-          Beta v0.1 — Live matching available now
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
+      <div className="w-full max-w-sm space-y-8">
+        {/* Logo */}
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Image src="/logo.jpg" alt="Konektado" width={40} height={40} className="rounded-full object-cover" />
+            <span className="font-bold text-xl">Konektado</span>
+          </div>
+          <p className="text-sm text-muted-foreground">Meet someone through real conversation</p>
         </div>
 
-        <h1 className="text-5xl sm:text-7xl font-bold tracking-tight mb-6 leading-tight">
-          Meet someone through
-          <span className="block bg-gradient-to-r from-pink-500 to-violet-600 bg-clip-text text-transparent">
-            real conversation
-          </span>
-        </h1>
-
-        <p className="text-lg text-muted-foreground max-w-xl mb-10 leading-relaxed">
-          Skip the swiping. Konektado matches you with someone nearby instantly —
-          you talk, play a mini-game together, and decide if you want to keep the connection.
-        </p>
-
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link href="/auth/register">
-            <Button size="lg" className="bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0 px-8 h-12 text-base">
-              Start Matching Free
-            </Button>
-          </Link>
-          <Link href="/auth/login">
-            <Button size="lg" variant="outline" className="px-8 h-12 text-base">
-              I have an account
-            </Button>
-          </Link>
-        </div>
-
-        {/* How it works */}
-        <div className="mt-24 grid grid-cols-1 sm:grid-cols-3 gap-8 text-left w-full">
-          {[
-            { step: '01', title: 'Enter the queue', desc: 'Allow location & microphone access, then tap to start. We find someone nearby who is ready to talk.' },
-            { step: '02', title: 'Voice call starts', desc: 'Once matched, a voice call begins automatically. No setup, no awkward typing — just talk.' },
-            { step: '03', title: 'Play & connect', desc: 'A fun "Would You Rather" mini-game runs during the call. Keep chatting or rematch after.' },
-          ].map(({ step, title, desc }) => (
-            <div key={step} className="rounded-2xl border border-border bg-card p-6">
-              <div className="text-xs font-mono text-muted-foreground mb-3">{step}</div>
-              <h3 className="font-semibold text-lg mb-2">{title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
-            </div>
+        {/* Step indicator */}
+        <div className="flex gap-2">
+          {[1, 2, 3].map((s) => (
+            <div
+              key={s}
+              className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                s <= step ? 'bg-gradient-to-r from-pink-500 to-violet-600' : 'bg-muted'
+              }`}
+            />
           ))}
         </div>
 
-        {/* Beta notice */}
-        <div className="mt-12 rounded-2xl border border-pink-500/20 bg-pink-500/5 px-6 py-5 text-sm text-muted-foreground max-w-xl text-left">
-          <span className="font-medium text-pink-400">Beta v0.1 — We need your feedback!</span> This is an early version of Konektado. Use the feedback button to tell us what works, what doesn&apos;t, and what you&apos;d love to see next.
-        </div>
+        {/* Step 1: Username */}
+        {step === 1 && (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-2xl font-bold mb-1">What should we call you?</h1>
+              <p className="text-muted-foreground text-sm">This is what others will see during your call</p>
+            </div>
+            <Input
+              placeholder="Your name or nickname"
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && form.username.trim().length >= 2) setStep(2);
+              }}
+              autoFocus
+              className="h-12 text-base"
+            />
+            <Button
+              onClick={() => {
+                if (form.username.trim().length < 2) {
+                  toast.error('Name must be at least 2 characters');
+                  return;
+                }
+                setStep(2);
+              }}
+              className="w-full h-12 bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
+            >
+              Continue →
+            </Button>
+          </div>
+        )}
 
-        {/* Safety note */}
-        <div className="mt-4 rounded-2xl border border-border bg-card px-6 py-5 text-sm text-muted-foreground max-w-xl text-left">
-          <span className="font-medium text-foreground">Your safety matters.</span> Every session has a report button and instant call-end. Blocked users never match again.
-        </div>
-      </main>
+        {/* Step 2: Age */}
+        {step === 2 && (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-2xl font-bold mb-1">How old are you?</h1>
+              <p className="text-muted-foreground text-sm">Must be 18 or older to use Konektado</p>
+            </div>
+            <Input
+              type="number"
+              placeholder="Your age"
+              value={form.age}
+              onChange={(e) => setForm({ ...form, age: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const age = parseInt(form.age);
+                  if (age >= 18 && age <= 100) setStep(3);
+                }
+              }}
+              min={18}
+              max={100}
+              autoFocus
+              className="h-12 text-base"
+            />
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setStep(1)} className="flex-1 h-12">
+                ← Back
+              </Button>
+              <Button
+                onClick={() => {
+                  const age = parseInt(form.age);
+                  if (!age || age < 18 || age > 100) {
+                    toast.error('Age must be between 18 and 100');
+                    return;
+                  }
+                  setStep(3);
+                }}
+                className="flex-1 h-12 bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
+              >
+                Continue →
+              </Button>
+            </div>
+          </div>
+        )}
 
-      <footer className="text-center py-6 text-xs text-muted-foreground border-t border-border">
-        © 2025 Konektado Beta v0.1 · Built for real human connection
-      </footer>
-      <FeedbackButton />
+        {/* Step 3: Gender */}
+        {step === 3 && (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-2xl font-bold mb-1">I identify as...</h1>
+              <p className="text-muted-foreground text-sm">Used to improve your matches</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {GENDERS.map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setForm({ ...form, gender: g })}
+                  className={`rounded-xl border px-4 py-4 text-sm capitalize font-medium transition-all ${
+                    form.gender === g
+                      ? 'border-pink-500 bg-pink-500/10 text-pink-400'
+                      : 'border-border hover:border-muted-foreground'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setStep(2)} className="flex-1 h-12">
+                ← Back
+              </Button>
+              <Button
+                onClick={handleFinish}
+                disabled={!form.gender || loading}
+                className="flex-1 h-12 bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
+              >
+                {loading ? 'Joining...' : 'Join Konektado'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <p className="text-center text-xs text-muted-foreground">
+          No account needed · Your session is stored locally
+        </p>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,4 @@
 import { create } from 'zustand';
-import Cookies from 'js-cookie';
-import api from '@/lib/api';
 
 interface User {
   id: string;
@@ -23,41 +21,56 @@ interface User {
 interface AuthState {
   user: User | null;
   token: string | null;
-  isLoading: boolean;
   setUser: (user: User | null) => void;
   setToken: (token: string) => void;
+  setSession: (token: string, user: User) => void;
   logout: () => void;
   fetchMe: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  token: Cookies.get('token') || null,
-  isLoading: false,
+function loadFromStorage() {
+  if (typeof window === 'undefined') return { user: null, token: null };
+  try {
+    return {
+      token: localStorage.getItem('kk_token'),
+      user: JSON.parse(localStorage.getItem('kk_user') || 'null'),
+    };
+  } catch {
+    return { user: null, token: null };
+  }
+}
 
-  setUser: (user) => set({ user }),
+const initial = loadFromStorage();
+
+export const useAuthStore = create<AuthState>((set) => ({
+  user: initial.user,
+  token: initial.token,
+
+  setUser: (user) => {
+    if (user) localStorage.setItem('kk_user', JSON.stringify(user));
+    else localStorage.removeItem('kk_user');
+    set({ user });
+  },
 
   setToken: (token) => {
-    Cookies.set('token', token, { expires: 7 });
+    localStorage.setItem('kk_token', token);
     set({ token });
   },
 
+  setSession: (token, user) => {
+    localStorage.setItem('kk_token', token);
+    localStorage.setItem('kk_user', JSON.stringify(user));
+    set({ token, user });
+  },
+
   logout: () => {
-    Cookies.remove('token');
+    localStorage.removeItem('kk_token');
+    localStorage.removeItem('kk_user');
     set({ user: null, token: null });
     window.location.href = '/';
   },
 
   fetchMe: async () => {
-    set({ isLoading: true });
-    try {
-      const { data } = await api.get('/auth/me');
-      set({ user: data });
-    } catch {
-      Cookies.remove('token');
-      set({ user: null, token: null });
-    } finally {
-      set({ isLoading: false });
-    }
+    // User data is stored locally — no remote fetch needed
   },
 }));

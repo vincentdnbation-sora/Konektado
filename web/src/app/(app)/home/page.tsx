@@ -1,17 +1,18 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useMatchStore } from '@/store/matchStore';
 import { Button } from '@/components/ui/button';
-import { connectSocket, disconnectSocket } from '@/lib/socket';
+import { connectSocket } from '@/lib/socket';
 import { toast } from 'sonner';
 
 export default function HomePage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { queueStatus, setQueueStatus, setMatch } = useMatchStore();
+  const [locationStatus, setLocationStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
 
   useEffect(() => {
     const socket = connectSocket();
@@ -24,7 +25,7 @@ export default function HomePage() {
     socket.on('match_found', (data: any) => {
       setMatch(data);
       toast.success('Match found! Starting voice call...');
-      router.push(`/app/call/${data.matchId}`);
+      router.push(`/call/${data.matchId}`);
     });
 
     return () => {
@@ -33,24 +34,33 @@ export default function HomePage() {
     };
   }, []);
 
+  function joinWithLocation(lat?: number, lng?: number) {
+    const socket = connectSocket();
+    socket.emit('join_queue', {
+      lat,
+      lng,
+      preferences: user?.preferences || {},
+    });
+    setQueueStatus('queued');
+    router.push('/queue');
+  }
+
   function handleJoinQueue() {
     if (!navigator.geolocation) {
-      toast.error('Geolocation not supported by your browser');
+      joinWithLocation();
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const socket = connectSocket();
-        socket.emit('join_queue', {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          preferences: user?.preferences || {},
-        });
-        setQueueStatus('queued');
-        router.push('/queue');
+        setLocationStatus('granted');
+        joinWithLocation(pos.coords.latitude, pos.coords.longitude);
       },
-      () => toast.error('Please allow location access to match with nearby people'),
+      () => {
+        setLocationStatus('denied');
+        joinWithLocation();
+      },
+      { timeout: 5000 },
     );
   }
 
@@ -72,15 +82,20 @@ export default function HomePage() {
           Hey, {user?.profile?.displayName || 'there'} 👋
         </h1>
         <p className="text-muted-foreground text-lg leading-relaxed">
-          Ready to meet someone new? Press the button and we&apos;ll find someone nearby to talk to.
+          Ready to meet someone new? Press the button and we'll find someone to talk to.
         </p>
+        {locationStatus === 'denied' && (
+          <p className="text-xs text-muted-foreground mt-3 bg-muted rounded-lg px-3 py-2 inline-block">
+            📍 Location denied — matching globally instead
+          </p>
+        )}
       </div>
 
       {queueStatus === 'idle' ? (
         <Button
           onClick={handleJoinQueue}
           size="lg"
-          className="h-16 px-12 text-lg rounded-full bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0 shadow-lg shadow-pink-500/30 transition-all hover:scale-105"
+          className="h-16 px-12 text-lg rounded-full bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0 shadow-lg shadow-pink-500/30 transition-all hover:scale-105 active:scale-95"
         >
           Find Someone to Talk To
         </Button>
@@ -98,7 +113,7 @@ export default function HomePage() {
       <div className="mt-12 grid grid-cols-3 gap-4 w-full text-sm text-muted-foreground">
         {[
           { label: 'Voice first', icon: '🎙️' },
-          { label: 'Nearby people', icon: '📍' },
+          { label: locationStatus === 'denied' ? 'Global match' : 'Nearby people', icon: '📍' },
           { label: 'Safe & private', icon: '🔒' },
         ].map(({ label, icon }) => (
           <div key={label} className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4">

@@ -19,7 +19,7 @@ export default function QueuePage() {
     socket.on('match_found', (data: any) => {
       setMatch(data);
       toast.success('Match found!');
-      router.push(`/app/call/${data.matchId}`);
+      router.push(`/call/${data.matchId}`);
     });
 
     return () => {
@@ -40,7 +40,6 @@ export default function QueuePage() {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center min-h-[80vh]">
-      {/* Animated pulse rings */}
       <div className="relative w-40 h-40 flex items-center justify-center mb-10">
         <div className="absolute inset-0 rounded-full bg-pink-500/10 animate-ping" style={{ animationDuration: '2s' }} />
         <div className="absolute inset-4 rounded-full bg-violet-500/10 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
@@ -52,7 +51,7 @@ export default function QueuePage() {
       </div>
 
       <h2 className="text-3xl font-bold mb-3">Finding your match...</h2>
-      <p className="text-muted-foreground text-lg mb-2">Looking for someone nearby who&apos;s ready to talk</p>
+      <p className="text-muted-foreground text-lg mb-2">Looking for someone ready to talk</p>
       <p className="text-2xl font-mono text-muted-foreground mb-10">
         {String(minutes).padStart(2, '0')}:{String(secs).padStart(2, '0')}
       </p>
@@ -60,7 +59,7 @@ export default function QueuePage() {
       <div className="flex flex-col gap-3 items-center text-sm text-muted-foreground mb-10">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          Searching your area
+          Searching for matches
         </div>
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: '0.3s' }} />

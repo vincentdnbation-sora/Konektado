@@ -10,15 +10,15 @@ import FeedbackButton from '@/components/FeedbackButton';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { token, user, fetchMe, logout } = useAuthStore();
+  const { token, user, logout } = useAuthStore();
 
   useEffect(() => {
     if (!token) {
-      router.push('/auth/login');
-      return;
+      router.push('/');
     }
-    if (!user) fetchMe();
   }, [token]);
+
+  if (!token) return null;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -28,6 +28,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="font-semibold text-lg tracking-tight">Konektado</span>
         </Link>
         <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground hidden sm:block">
+            {user?.profile?.displayName}
+          </span>
           <Link href="/profile">
             <Button variant="ghost" size="sm">Profile</Button>
           </Link>
