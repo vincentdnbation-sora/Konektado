@@ -32,8 +32,8 @@ const ALLOWED_ORIGINS = [
     },
     credentials: true,
   },
-  // Allow both websocket and polling for mobile browser compatibility
-  transports: ['websocket', 'polling'],
+  // polling first for better mobile compatibility — matches client config
+  transports: ['polling', 'websocket'],
   pingInterval: 10000,
   pingTimeout: 15000,
 })

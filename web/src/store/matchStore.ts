@@ -57,7 +57,7 @@ export const useMatchStore = create<MatchState>((set) => ({
       roomName: data.roomName,
       partnerId: data.partnerId ?? null,
       livekitToken: data.token,
-      livekitUrl: data.livekitUrl || LIVEKIT_URL,
+      livekitUrl: LIVEKIT_URL,
       queueStatus: 'matched' as const,
     };
     saveSessionState(state);

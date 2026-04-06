@@ -182,7 +182,7 @@ exports.MatchmakingGateway = MatchmakingGateway = MatchmakingGateway_1 = __decor
             },
             credentials: true,
         },
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         pingInterval: 10000,
         pingTimeout: 15000,
     }),

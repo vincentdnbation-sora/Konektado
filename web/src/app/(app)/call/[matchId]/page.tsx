@@ -22,20 +22,31 @@ function CallRoom({ isMuted }: { isMuted: boolean }) {
   const remoteParticipants = useRemoteParticipants();
   const partnerConnected = remoteParticipants.length > 0;
   const micEnabled = useRef(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+
+  // Unlock audio on first user tap (required for iOS Safari autoplay)
+  const unlockAudio = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      ctx.resume().then(() => setAudioUnlocked(true)).catch(() => {});
+      // Also resume any existing suspended contexts
+      if (typeof document !== 'undefined') {
+        document.querySelectorAll('audio').forEach((el) => {
+          (el as HTMLAudioElement).play().catch(() => {});
+        });
+      }
+    } catch {}
+    setAudioUnlocked(true);
+  }, []);
 
   useEffect(() => {
     if (!localParticipant || micEnabled.current) return;
     micEnabled.current = true;
 
-    // Unlock AudioContext (required on iOS Safari before any audio can play)
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      ctx.resume().catch(() => {});
-    } catch {}
-
     // Let LiveKit handle getUserMedia — avoid double permission prompts on mobile
     localParticipant.setMicrophoneEnabled(true).catch((err) => {
       console.warn('[CallRoom] mic enable failed:', err);
+      toast.error('Microphone access failed — check browser permissions');
     });
   }, [localParticipant]);
 
@@ -46,9 +57,18 @@ function CallRoom({ isMuted }: { isMuted: boolean }) {
 
   return (
     <div className="w-full flex flex-col items-center gap-2">
-      {/* Fix 1: RoomAudioRenderer plays all remote audio tracks.
-          Without this the browser receives audio from LiveKit but never plays it. */}
+      {/* RoomAudioRenderer plays all remote audio tracks */}
       <RoomAudioRenderer />
+
+      {/* iOS Safari requires a user gesture to unlock audio playback */}
+      {!audioUnlocked && (
+        <button
+          onClick={unlockAudio}
+          className="bg-violet-500/10 border border-violet-500/30 rounded-xl px-5 py-3 text-sm text-violet-400 w-full text-center animate-pulse"
+        >
+          🔊 Tap here to enable audio
+        </button>
+      )}
 
       {!partnerConnected && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground bg-card border border-border rounded-full px-4 py-2">
@@ -93,6 +113,9 @@ export default function CallPage() {
   useEffect(() => {
     return () => { isMounted.current = false; };
   }, []);
+
+  // LiveKit connection state for debugging
+  const [lkConnected, setLkConnected] = useState(false);
 
   // Stable bar heights so the sound wave doesn't flicker on re-render
   const barHeights = useRef<number[]>(
@@ -225,6 +248,14 @@ export default function CallPage() {
           noiseSuppression: true,
           autoGainControl: true,
         },
+      }}
+      onConnected={() => {
+        setLkConnected(true);
+        console.log('[LiveKit] connected to room');
+      }}
+      onError={(err) => {
+        console.error('[LiveKit] error:', err);
+        toast.error('Voice connection failed — retrying...');
       }}
       onDisconnected={() => handleEndCall('disconnected')}
     >
