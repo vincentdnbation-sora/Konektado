@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { AccessToken } from 'livekit-server-sdk';
 
 @Injectable()
 export class VoiceService {
   async createToken(roomName: string, userId: string): Promise<string> {
+    const { AccessToken } = await import('livekit-server-sdk');
     const token = new AccessToken(
       process.env.LIVEKIT_API_KEY,
       process.env.LIVEKIT_API_SECRET,
