@@ -5,48 +5,73 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useMatchStore } from '@/store/matchStore';
 import { connectSocket } from '@/lib/socket';
-import { LiveKitRoom, useLocalParticipant } from '@livekit/components-react';
+import { LiveKitRoom, useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
 import '@livekit/components-styles';
-import MiniGame from '@/components/call/MiniGame';
 import CallControls from '@/components/call/CallControls';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
 
 function AudioSetup({ isMuted }: { isMuted: boolean }) {
   const { localParticipant } = useLocalParticipant();
-  const [needsUnlock, setNeedsUnlock] = useState(false);
+  const remoteParticipants = useRemoteParticipants();
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [partnerConnected, setPartnerConnected] = useState(false);
 
+  // Track partner connection
+  useEffect(() => {
+    setPartnerConnected(remoteParticipants.length > 0);
+  }, [remoteParticipants]);
+
+  // Enable mic whenever localParticipant is ready or mute changes
   useEffect(() => {
     if (!localParticipant) return;
-    localParticipant.setMicrophoneEnabled(!isMuted).catch(() => {
-      setNeedsUnlock(true);
-    });
+    localParticipant.setMicrophoneEnabled(!isMuted).catch(() => {});
   }, [isMuted, localParticipant]);
 
-  function unlockAudio() {
-    // Create and immediately suspend/resume an AudioContext to unlock iOS
-    const ctx = new AudioContext();
-    ctx.resume().then(() => {
-      setNeedsUnlock(false);
-      if (localParticipant) {
-        localParticipant.setMicrophoneEnabled(!isMuted).catch(() => {});
-      }
-    });
+  // iOS Safari audio unlock overlay
+  if (!audioUnlocked) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-sm">
+        <div className="text-center space-y-5 px-8 max-w-xs">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center mx-auto text-3xl shadow-lg shadow-pink-500/30">
+            🎙️
+          </div>
+          <div>
+            <p className="font-bold text-lg">Tap to start your call</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Your browser needs a tap to activate the microphone
+            </p>
+          </div>
+          <Button
+            onClick={() => {
+              // Unlock AudioContext (required on iOS Safari)
+              try {
+                const ctx = new AudioContext();
+                ctx.resume();
+              } catch {}
+              setAudioUnlocked(true);
+              if (localParticipant) {
+                localParticipant.setMicrophoneEnabled(true).catch(() => {});
+              }
+            }}
+            className="w-full h-14 text-lg bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
+          >
+            Start Call
+          </Button>
+        </div>
+      </div>
+    );
   }
 
-  if (!needsUnlock) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-      <div className="text-center space-y-4 px-8">
-        <div className="text-4xl">🎙️</div>
-        <p className="font-semibold">Tap to enable audio</p>
-        <p className="text-sm text-muted-foreground">Your browser requires a tap to start the voice call</p>
-        <Button onClick={unlockAudio} className="bg-gradient-to-r from-pink-500 to-violet-600 text-white border-0 px-8">
-          Enable Audio
-        </Button>
+    <>
+      {/* Partner connection status */}
+      <div className={`fixed top-20 left-0 right-0 flex justify-center z-10 transition-all duration-500 ${partnerConnected ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <div className="bg-card border border-border rounded-full px-4 py-2 text-sm text-muted-foreground flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+          Waiting for partner to connect...
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -120,43 +145,44 @@ export default function CallPage() {
     >
       <AudioSetup isMuted={isMuted} />
 
-      <div className="flex-1 flex flex-col items-center px-4 py-6 max-w-md mx-auto w-full gap-5">
-        {/* Call header */}
-        <div className="text-center w-full">
-          <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card border border-border rounded-full px-4 py-1.5 mb-4">
+      <div className="flex-1 flex flex-col items-center px-4 py-8 max-w-md mx-auto w-full gap-8">
+        {/* Call status */}
+        <div className="text-center w-full pt-4">
+          <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card border border-border rounded-full px-4 py-1.5 mb-6">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
             </span>
             Live · {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
           </div>
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-pink-600 flex items-center justify-center mx-auto mb-2 text-2xl shadow-lg">
+
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-violet-500 to-pink-600 flex items-center justify-center mx-auto mb-4 text-4xl shadow-xl shadow-violet-500/20">
             ?
           </div>
-          <h2 className="font-semibold">Someone nearby</h2>
-          <p className="text-xs text-muted-foreground">Voice match in progress</p>
+          <h2 className="font-semibold text-xl">Someone nearby</h2>
+          <p className="text-sm text-muted-foreground mt-1">Voice call in progress — just talk!</p>
         </div>
 
-        {/* Sound wave */}
-        <div className="flex items-end gap-0.5 h-10">
-          {Array.from({ length: 24 }).map((_, i) => (
+        {/* Animated sound wave */}
+        <div className="flex items-end justify-center gap-1 h-16 w-full">
+          {Array.from({ length: 28 }).map((_, i) => (
             <div
               key={i}
-              className={`w-1.5 rounded-full animate-pulse ${isMuted ? 'bg-muted' : 'bg-gradient-to-t from-pink-500 to-violet-500'}`}
+              className={`w-1.5 rounded-full ${isMuted ? 'bg-muted opacity-40' : 'bg-gradient-to-t from-pink-500 to-violet-500'}`}
               style={{
-                height: `${20 + Math.random() * 80}%`,
-                animationDelay: `${i * 0.04}s`,
-                animationDuration: `${0.4 + Math.random() * 0.4}s`,
-                minHeight: 3,
+                height: `${15 + Math.random() * 85}%`,
+                animation: isMuted ? 'none' : `pulse ${0.4 + Math.random() * 0.5}s ease-in-out ${i * 0.03}s infinite alternate`,
+                minHeight: 4,
               }}
             />
           ))}
         </div>
 
-        {/* Jump game */}
-        <div className="w-full">
-          <MiniGame matchId={matchId} userId={user?.id || ''} />
-        </div>
+        {isMuted && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-sm text-red-400 text-center w-full">
+            🔇 You are muted — tap the mic button to unmute
+          </div>
+        )}
 
         {/* Controls */}
         <div className="w-full mt-auto">
