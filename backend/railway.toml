@@ -3,6 +3,6 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "npx prisma migrate deploy && node dist/main"
+startCommand = "npx prisma migrate deploy; echo '=== Starting node ===' && node dist/main 2>&1; echo '=== Node exited:' $?"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
