@@ -15,12 +15,12 @@ export interface GameDef {
 }
 
 export const GAME_CATALOG: GameDef[] = [
-  { id: 'memory',    title: 'Memory Cards',      description: 'Find matching pairs together using voice hints',         icon: '🃏', premium: false },
-  { id: 'jump',      title: 'Sync Jump',          description: 'Jump over gaps at the same time as your partner',        icon: '🏃', premium: false },
-  { id: 'trivia',    title: 'Couple Trivia',      description: 'Answer fun questions & see how compatible you are',       icon: '🧠', premium: true },
-  { id: 'drawing',   title: 'Draw Together',       description: 'Take turns drawing & guessing what it is',              icon: '🎨', premium: true },
-  { id: 'wouldyou',  title: 'Would You Rather',   description: 'Spicy or sweet — discover each other\'s preferences',    icon: '🔥', premium: true },
-  { id: 'music',     title: 'Song Quiz',           description: 'Guess the song from a short clip — compete or cooperate', icon: '🎵', premium: true },
+  { id: 'memory',     title: 'Memory Cards',     description: 'Find matching pairs together using voice hints',        icon: '🃏', premium: false },
+  { id: 'tictactoe', title: 'Tic Tac Toe',      description: 'Classic X & O — outsmart your match!',                 icon: '❌', premium: false },
+  { id: 'rope',      title: 'Grab the Rope',    description: 'Tap fast to pull the rope to your side',               icon: '🪢', premium: false },
+  { id: 'pong',      title: 'Pong',             description: 'Retro paddle battle — first to 5 wins',               icon: '🏓', premium: false },
+  { id: 'chess',     title: 'Chess',            description: 'The ultimate strategy game — think ahead!',            icon: '♟️', premium: true },
+  { id: 'billiards', title: 'Billiards',        description: 'Pocket all your balls before your opponent',           icon: '🎱', premium: true },
 ];
 
 // ── Invite status types ──

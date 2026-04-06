@@ -11,8 +11,10 @@ import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { MatchmakingService } from './matchmaking.service';
-import { handleJump, cleanupGame } from './sync-game';
 import { startMemoryGame, handleMemoryFlip, cleanupMemoryGame } from './memory-game';
+import { startTicTacToe, handleTicTacToeMove, cleanupTicTacToe } from './tictactoe-game';
+import { startRopeGame, handleRopePull, cleanupRopeGame } from './rope-game';
+import { startPongGame, handlePongInput, cleanupPongGame } from './pong-game';
 import Redis from 'ioredis';
 
 const ALLOWED_ORIGINS = [
@@ -127,8 +129,10 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   ) {
     if (!client.data.userId) return;
     this.logger.log(`[end_match] userId=${client.data.userId} matchId=${data.matchId}`);
-    cleanupGame(data.matchId);
     cleanupMemoryGame(data.matchId);
+    cleanupTicTacToe(data.matchId);
+    cleanupRopeGame(data.matchId);
+    cleanupPongGame(data.matchId);
     await this.matchmakingService.endMatch(
       data.matchId,
       client.data.userId,
@@ -149,8 +153,10 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     this.logger.log(`[next_match] userId=${userId} matchId=${data.matchId}`);
 
     if (data.matchId) {
-      cleanupGame(data.matchId);
       cleanupMemoryGame(data.matchId);
+      cleanupTicTacToe(data.matchId);
+      cleanupRopeGame(data.matchId);
+      cleanupPongGame(data.matchId);
       await this.matchmakingService.endMatch(
         data.matchId,
         userId,
@@ -177,14 +183,6 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     }
   }
 
-  @SubscribeMessage('game_jump')
-  handleGameJump(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: { matchId: string },
-  ) {
-    handleJump(data.matchId, client.data.userId, this.server);
-  }
-
   @SubscribeMessage('memory:start')
   handleMemoryStart(
     @ConnectedSocket() client: Socket,
@@ -204,6 +202,75 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     const userId = client.data.userId;
     if (!userId || !data.matchId || data.cardIndex == null) return;
     handleMemoryFlip(data.matchId, userId, data.cardIndex, this.server);
+  }
+
+  // ── Tic Tac Toe ──
+
+  @SubscribeMessage('ttt:start')
+  handleTttStart(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string; partnerId: string },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.matchId || !data.partnerId) return;
+    this.logger.log(`[ttt:start] userId=${userId} matchId=${data.matchId}`);
+    startTicTacToe(data.matchId, userId, data.partnerId, this.server);
+  }
+
+  @SubscribeMessage('ttt:move')
+  handleTttMove(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string; cellIndex: number },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.matchId || data.cellIndex == null) return;
+    handleTicTacToeMove(data.matchId, userId, data.cellIndex, this.server);
+  }
+
+  // ── Grab the Rope ──
+
+  @SubscribeMessage('rope:start')
+  handleRopeStart(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string; partnerId: string },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.matchId || !data.partnerId) return;
+    this.logger.log(`[rope:start] userId=${userId} matchId=${data.matchId}`);
+    startRopeGame(data.matchId, userId, data.partnerId, this.server);
+  }
+
+  @SubscribeMessage('rope:pull')
+  onRopePull(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.matchId) return;
+    handleRopePull(data.matchId, userId, this.server);
+  }
+
+  // ── Pong ──
+
+  @SubscribeMessage('pong:start')
+  handlePongStart(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string; partnerId: string },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.matchId || !data.partnerId) return;
+    this.logger.log(`[pong:start] userId=${userId} matchId=${data.matchId}`);
+    startPongGame(data.matchId, userId, data.partnerId, this.server);
+  }
+
+  @SubscribeMessage('pong:input')
+  onPongInput(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string; direction: 'up' | 'down' | 'stop' },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.matchId || !data.direction) return;
+    handlePongInput(data.matchId, userId, data.direction, this.server);
   }
 
   // ── Game invitation system ──

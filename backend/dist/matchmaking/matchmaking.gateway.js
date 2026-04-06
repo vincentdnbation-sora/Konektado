@@ -22,7 +22,10 @@ const common_1 = require("@nestjs/common");
 const socket_io_1 = require("socket.io");
 const jwt_1 = require("@nestjs/jwt");
 const matchmaking_service_1 = require("./matchmaking.service");
-const sync_game_1 = require("./sync-game");
+const memory_game_1 = require("./memory-game");
+const tictactoe_game_1 = require("./tictactoe-game");
+const rope_game_1 = require("./rope-game");
+const pong_game_1 = require("./pong-game");
 const ioredis_1 = __importDefault(require("ioredis"));
 const ALLOWED_ORIGINS = [
     'http://localhost:3000',
@@ -97,7 +100,10 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
         if (!client.data.userId)
             return;
         this.logger.log(`[end_match] userId=${client.data.userId} matchId=${data.matchId}`);
-        (0, sync_game_1.cleanupGame)(data.matchId);
+        (0, memory_game_1.cleanupMemoryGame)(data.matchId);
+        (0, tictactoe_game_1.cleanupTicTacToe)(data.matchId);
+        (0, rope_game_1.cleanupRopeGame)(data.matchId);
+        (0, pong_game_1.cleanupPongGame)(data.matchId);
         await this.matchmakingService.endMatch(data.matchId, client.data.userId, data.reason || 'user_left', this.redis, this.server);
     }
     async nextMatch(client, data) {
@@ -106,7 +112,10 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
             return;
         this.logger.log(`[next_match] userId=${userId} matchId=${data.matchId}`);
         if (data.matchId) {
-            (0, sync_game_1.cleanupGame)(data.matchId);
+            (0, memory_game_1.cleanupMemoryGame)(data.matchId);
+            (0, tictactoe_game_1.cleanupTicTacToe)(data.matchId);
+            (0, rope_game_1.cleanupRopeGame)(data.matchId);
+            (0, pong_game_1.cleanupPongGame)(data.matchId);
             await this.matchmakingService.endMatch(data.matchId, userId, 'user_skipped', this.redis, this.server);
         }
         try {
@@ -120,8 +129,92 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
             client.emit('queue_status', { status: 'error', message: err.message });
         }
     }
-    handleGameJump(client, data) {
-        (0, sync_game_1.handleJump)(data.matchId, client.data.userId, this.server);
+    handleMemoryStart(client, data) {
+        const userId = client.data.userId;
+        if (!userId || !data.matchId || !data.partnerId)
+            return;
+        this.logger.log(`[memory:start] userId=${userId} matchId=${data.matchId}`);
+        (0, memory_game_1.startMemoryGame)(data.matchId, userId, data.partnerId, this.server);
+    }
+    handleMemoryFlip(client, data) {
+        const userId = client.data.userId;
+        if (!userId || !data.matchId || data.cardIndex == null)
+            return;
+        (0, memory_game_1.handleMemoryFlip)(data.matchId, userId, data.cardIndex, this.server);
+    }
+    handleTttStart(client, data) {
+        const userId = client.data.userId;
+        if (!userId || !data.matchId || !data.partnerId)
+            return;
+        this.logger.log(`[ttt:start] userId=${userId} matchId=${data.matchId}`);
+        (0, tictactoe_game_1.startTicTacToe)(data.matchId, userId, data.partnerId, this.server);
+    }
+    handleTttMove(client, data) {
+        const userId = client.data.userId;
+        if (!userId || !data.matchId || data.cellIndex == null)
+            return;
+        (0, tictactoe_game_1.handleTicTacToeMove)(data.matchId, userId, data.cellIndex, this.server);
+    }
+    handleRopeStart(client, data) {
+        const userId = client.data.userId;
+        if (!userId || !data.matchId || !data.partnerId)
+            return;
+        this.logger.log(`[rope:start] userId=${userId} matchId=${data.matchId}`);
+        (0, rope_game_1.startRopeGame)(data.matchId, userId, data.partnerId, this.server);
+    }
+    onRopePull(client, data) {
+        const userId = client.data.userId;
+        if (!userId || !data.matchId)
+            return;
+        (0, rope_game_1.handleRopePull)(data.matchId, userId, this.server);
+    }
+    handlePongStart(client, data) {
+        const userId = client.data.userId;
+        if (!userId || !data.matchId || !data.partnerId)
+            return;
+        this.logger.log(`[pong:start] userId=${userId} matchId=${data.matchId}`);
+        (0, pong_game_1.startPongGame)(data.matchId, userId, data.partnerId, this.server);
+    }
+    onPongInput(client, data) {
+        const userId = client.data.userId;
+        if (!userId || !data.matchId || !data.direction)
+            return;
+        (0, pong_game_1.handlePongInput)(data.matchId, userId, data.direction, this.server);
+    }
+    handleGameInvite(client, data) {
+        const userId = client.data.userId;
+        if (!userId || !data.matchId || !data.partnerId || !data.gameId)
+            return;
+        this.logger.log(`[game:invite] ${userId} → ${data.partnerId} game=${data.gameId} match=${data.matchId}`);
+        this.server.to(`user:${data.partnerId}`).emit('game:invite', {
+            matchId: data.matchId,
+            fromUserId: userId,
+            gameId: data.gameId,
+            gameTitle: data.gameTitle,
+        });
+    }
+    handleGameAccept(client, data) {
+        const userId = client.data.userId;
+        if (!userId || !data.matchId || !data.partnerId || !data.gameId)
+            return;
+        this.logger.log(`[game:accept] ${userId} accepted ${data.gameId} match=${data.matchId}`);
+        this.server.to(`user:${userId}`).to(`user:${data.partnerId}`).emit('game:accepted', {
+            matchId: data.matchId,
+            gameId: data.gameId,
+            gameTitle: data.gameTitle,
+            acceptedBy: userId,
+        });
+    }
+    handleGameDecline(client, data) {
+        const userId = client.data.userId;
+        if (!userId || !data.matchId || !data.partnerId)
+            return;
+        this.logger.log(`[game:decline] ${userId} declined ${data.gameId} match=${data.matchId}`);
+        this.server.to(`user:${data.partnerId}`).emit('game:declined', {
+            matchId: data.matchId,
+            gameId: data.gameId,
+            declinedBy: userId,
+        });
     }
 };
 exports.MatchmakingGateway = MatchmakingGateway;
@@ -161,13 +254,93 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], MatchmakingGateway.prototype, "nextMatch", null);
 __decorate([
-    (0, websockets_1.SubscribeMessage)('game_jump'),
+    (0, websockets_1.SubscribeMessage)('memory:start'),
     __param(0, (0, websockets_1.ConnectedSocket)()),
     __param(1, (0, websockets_1.MessageBody)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
     __metadata("design:returntype", void 0)
-], MatchmakingGateway.prototype, "handleGameJump", null);
+], MatchmakingGateway.prototype, "handleMemoryStart", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('memory:flip'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", void 0)
+], MatchmakingGateway.prototype, "handleMemoryFlip", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('ttt:start'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", void 0)
+], MatchmakingGateway.prototype, "handleTttStart", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('ttt:move'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", void 0)
+], MatchmakingGateway.prototype, "handleTttMove", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('rope:start'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", void 0)
+], MatchmakingGateway.prototype, "handleRopeStart", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('rope:pull'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", void 0)
+], MatchmakingGateway.prototype, "onRopePull", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('pong:start'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", void 0)
+], MatchmakingGateway.prototype, "handlePongStart", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('pong:input'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", void 0)
+], MatchmakingGateway.prototype, "onPongInput", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('game:invite'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", void 0)
+], MatchmakingGateway.prototype, "handleGameInvite", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('game:accept'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", void 0)
+], MatchmakingGateway.prototype, "handleGameAccept", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('game:decline'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", void 0)
+], MatchmakingGateway.prototype, "handleGameDecline", null);
 exports.MatchmakingGateway = MatchmakingGateway = MatchmakingGateway_1 = __decorate([
     (0, websockets_1.WebSocketGateway)({
         cors: {

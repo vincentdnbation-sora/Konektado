@@ -3,7 +3,6 @@ import Redis from 'ioredis';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { VoiceService } from '../voice/voice.service';
-import { startSyncGame } from './sync-game';
 
 const QUEUE_KEY = 'matchmaking:queue';
 const USER_DATA_PREFIX = 'matchmaking:user:';
@@ -225,7 +224,6 @@ export class MatchmakingService {
       this.logger.error(`[createMatch] DB persist failed: ${err}`),
     );
 
-    startSyncGame(matchId, user1Id, user2Id, server);
   }
 
   // ─── persistMatch ─────────────────────────────────────────────────────

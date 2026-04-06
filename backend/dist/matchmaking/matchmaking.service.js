@@ -15,7 +15,6 @@ const common_1 = require("@nestjs/common");
 const crypto_1 = require("crypto");
 const prisma_service_1 = require("../prisma/prisma.service");
 const voice_service_1 = require("../voice/voice.service");
-const sync_game_1 = require("./sync-game");
 const QUEUE_KEY = 'matchmaking:queue';
 const USER_DATA_PREFIX = 'matchmaking:user:';
 const MATCHED_SET = 'matched:users';
@@ -171,7 +170,6 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
         });
         this.logger.log(`[createMatch] emitted match_found to both users`);
         this.persistMatch(matchId, user1Id, user2Id, roomName).catch((err) => this.logger.error(`[createMatch] DB persist failed: ${err}`));
-        (0, sync_game_1.startSyncGame)(matchId, user1Id, user2Id, server);
     }
     async persistMatch(matchId, user1Id, user2Id, roomName) {
         await this.prisma.match.create({

@@ -17,8 +17,10 @@ import {
 import { ConnectionState, Track, RoomEvent } from 'livekit-client';
 import '@livekit/components-styles';
 import CallControls from '@/components/call/CallControls';
-import MiniGame from '@/components/call/MiniGame';
 import MemoryGame from '@/components/call/MemoryGame';
+import TicTacToeGame from '@/components/call/TicTacToeGame';
+import RopeGame from '@/components/call/RopeGame';
+import PongGame from '@/components/call/PongGame';
 import { GameSheet, GameInviteOverlay, GAME_CATALOG } from '@/components/call/GameSheet';
 import type { InviteStatus } from '@/components/call/GameSheet';
 import { Button } from '@/components/ui/button';
@@ -653,8 +655,12 @@ export default function CallPage() {
         <div className="w-full space-y-2">
           {activeGame === 'memory' ? (
             <MemoryGame matchId={matchId} userId={user?.id ?? ''} partnerId={partnerId ?? ''} autoStart />
-          ) : activeGame === 'jump' ? (
-            <MiniGame matchId={matchId} userId={user?.id ?? ''} />
+          ) : activeGame === 'tictactoe' ? (
+            <TicTacToeGame matchId={matchId} userId={user?.id ?? ''} partnerId={partnerId ?? ''} autoStart />
+          ) : activeGame === 'rope' ? (
+            <RopeGame matchId={matchId} userId={user?.id ?? ''} partnerId={partnerId ?? ''} autoStart />
+          ) : activeGame === 'pong' ? (
+            <PongGame matchId={matchId} userId={user?.id ?? ''} partnerId={partnerId ?? ''} autoStart />
           ) : (
             <button
               onClick={() => setSheetOpen(true)}

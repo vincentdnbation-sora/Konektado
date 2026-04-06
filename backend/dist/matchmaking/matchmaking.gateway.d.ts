@@ -23,7 +23,52 @@ export declare class MatchmakingGateway implements OnGatewayConnection, OnGatewa
         lng?: number;
         preferences?: any;
     }): Promise<void>;
-    handleGameJump(client: Socket, data: {
+    handleMemoryStart(client: Socket, data: {
         matchId: string;
+        partnerId: string;
+    }): void;
+    handleMemoryFlip(client: Socket, data: {
+        matchId: string;
+        cardIndex: number;
+    }): void;
+    handleTttStart(client: Socket, data: {
+        matchId: string;
+        partnerId: string;
+    }): void;
+    handleTttMove(client: Socket, data: {
+        matchId: string;
+        cellIndex: number;
+    }): void;
+    handleRopeStart(client: Socket, data: {
+        matchId: string;
+        partnerId: string;
+    }): void;
+    onRopePull(client: Socket, data: {
+        matchId: string;
+    }): void;
+    handlePongStart(client: Socket, data: {
+        matchId: string;
+        partnerId: string;
+    }): void;
+    onPongInput(client: Socket, data: {
+        matchId: string;
+        direction: 'up' | 'down' | 'stop';
+    }): void;
+    handleGameInvite(client: Socket, data: {
+        matchId: string;
+        partnerId: string;
+        gameId: string;
+        gameTitle: string;
+    }): void;
+    handleGameAccept(client: Socket, data: {
+        matchId: string;
+        partnerId: string;
+        gameId: string;
+        gameTitle: string;
+    }): void;
+    handleGameDecline(client: Socket, data: {
+        matchId: string;
+        partnerId: string;
+        gameId: string;
     }): void;
 }
