@@ -12,20 +12,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { token, user, fetchMe, logout } = useAuthStore();
 
   useEffect(() => {
-    const stored = localStorage.getItem('voicematch_session');
-    if (!stored) {
+    if (!token) {
       router.push('/auth/login');
       return;
     }
     if (!user) fetchMe();
-  }, []);
+  }, [token]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <nav className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-background/80 backdrop-blur-sm z-10">
         <Link href="/home" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm">V</div>
-          <span className="font-semibold text-lg tracking-tight">VoiceMatch</span>
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm">K</div>
+          <span className="font-semibold text-lg tracking-tight">Konektado</span>
         </Link>
         <div className="flex items-center gap-3">
           <Link href="/profile">

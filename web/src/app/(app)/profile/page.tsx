@@ -6,15 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { demoUpdateProfile, demoUpdatePreferences } from '@/lib/demoAuth';
+import api from '@/lib/api';
 import { toast } from 'sonner';
 
 export default function ProfilePage() {
-  const { user, setUser } = useAuthStore();
+  const { user, fetchMe } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [profile, setProfile] = useState({
-    displayName: user?.displayName || '',
-    bio: user?.bio || '',
+    displayName: user?.profile?.displayName || '',
+    bio: user?.profile?.bio || '',
   });
   const [prefs, setPrefs] = useState({
     preferredGender: user?.preferences?.preferredGender || 'any',
@@ -24,12 +24,11 @@ export default function ProfilePage() {
   });
 
   async function saveProfile() {
-    if (!user) return;
     setLoading(true);
     try {
-      const updated = demoUpdatePreferences(user.id, prefs);
-      const updatedProfile = demoUpdateProfile(user.id, profile);
-      if (updatedProfile) setUser(updatedProfile);
+      await api.patch('/users/profile', profile);
+      await api.patch('/users/preferences', prefs);
+      await fetchMe();
       toast.success('Profile updated!');
     } catch {
       toast.error('Failed to update profile');
@@ -63,14 +62,8 @@ export default function ProfilePage() {
             <Label>Preferred gender</Label>
             <div className="flex gap-2 flex-wrap">
               {['any', 'male', 'female', 'non-binary', 'other'].map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setPrefs({ ...prefs, preferredGender: g })}
-                  className={`rounded-lg border px-4 py-2 text-sm capitalize transition-colors ${
-                    prefs.preferredGender === g ? 'border-pink-500 bg-pink-500/10 text-pink-400' : 'border-border hover:border-muted-foreground'
-                  }`}
-                >
+                <button key={g} type="button" onClick={() => setPrefs({ ...prefs, preferredGender: g })}
+                  className={`rounded-lg border px-4 py-2 text-sm capitalize transition-colors ${prefs.preferredGender === g ? 'border-pink-500 bg-pink-500/10 text-pink-400' : 'border-border hover:border-muted-foreground'}`}>
                   {g}
                 </button>
               ))}
@@ -88,21 +81,15 @@ export default function ProfilePage() {
           </div>
           <div className="space-y-2">
             <Label>Max distance: {prefs.maxDistanceKm} km</Label>
-            <input
-              type="range" min={5} max={200} step={5}
-              value={prefs.maxDistanceKm}
+            <input type="range" min={5} max={200} step={5} value={prefs.maxDistanceKm}
               onChange={(e) => setPrefs({ ...prefs, maxDistanceKm: +e.target.value })}
-              className="w-full accent-pink-500"
-            />
+              className="w-full accent-pink-500" />
           </div>
         </CardContent>
       </Card>
 
-      <Button
-        onClick={saveProfile}
-        disabled={loading}
-        className="w-full bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
-      >
+      <Button onClick={saveProfile} disabled={loading}
+        className="w-full bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0">
         {loading ? 'Saving...' : 'Save Changes'}
       </Button>
     </div>

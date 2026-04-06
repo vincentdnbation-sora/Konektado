@@ -69,7 +69,7 @@ export default function HomePage() {
           </svg>
         </div>
         <h1 className="text-3xl font-bold mb-3">
-          Hey, {user?.displayName || 'there'} 👋
+          Hey, {user?.profile?.displayName || 'there'} 👋
         </h1>
         <p className="text-muted-foreground text-lg leading-relaxed">
           Ready to meet someone new? Press the button and we&apos;ll find someone nearby to talk to.
