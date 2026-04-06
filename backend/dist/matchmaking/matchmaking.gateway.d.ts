@@ -6,8 +6,8 @@ export declare class MatchmakingGateway implements OnGatewayConnection, OnGatewa
     private matchmakingService;
     private jwtService;
     server: Server;
+    private readonly logger;
     private redis;
-    private matchInterval;
     constructor(matchmakingService: MatchmakingService, jwtService: JwtService);
     handleConnection(client: Socket): Promise<void>;
     handleDisconnect(client: Socket): Promise<void>;
@@ -17,8 +17,13 @@ export declare class MatchmakingGateway implements OnGatewayConnection, OnGatewa
         matchId: string;
         reason: string;
     }): Promise<void>;
+    nextMatch(client: Socket, data: {
+        matchId: string;
+        lat?: number;
+        lng?: number;
+        preferences?: any;
+    }): Promise<void>;
     handleGameJump(client: Socket, data: {
         matchId: string;
     }): void;
-    startGameForMatch(matchId: string, user1Id: string, user2Id: string): void;
 }

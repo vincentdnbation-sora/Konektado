@@ -9,6 +9,9 @@ const QUEUE_KEY = 'matchmaking:queue';
 const USER_DATA_PREFIX = 'matchmaking:user:';
 const MATCHED_SET = 'matched:users';
 
+/** Grace period before treating a disconnect as permanent (covers mobile tab switches, network blips) */
+const DISCONNECT_GRACE_MS = 8000;
+
 export interface ActiveMatch {
   user1Id: string;
   user2Id: string;
@@ -23,6 +26,9 @@ export class MatchmakingService {
   readonly activeMatches = new Map<string, ActiveMatch>();
   private readonly userToMatch = new Map<string, string>();
 
+  /** Pending disconnect timers — cancelled if user reconnects within grace period */
+  private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
+
   constructor(
     private prisma: PrismaService,
     private voiceService: VoiceService,
@@ -36,6 +42,14 @@ export class MatchmakingService {
     server?: any,
   ): Promise<{ status: string }> {
     this.logger.log(`[joinQueue] userId=${userId}`);
+
+    // If user already has an active match (e.g. matched during brief disconnect), resend it
+    const existingMatchId = this.userToMatch.get(userId);
+    if (existingMatchId && this.activeMatches.has(existingMatchId) && server) {
+      this.logger.log(`[joinQueue] user ${userId} already matched (${existingMatchId}) — resending`);
+      await this.resendMatchIfExists(userId, server);
+      return { status: 'matched' };
+    }
 
     // Remove stale state — user may be rejoining after ending a call
     await Promise.all([
@@ -257,16 +271,73 @@ export class MatchmakingService {
   }
 
   // ─── handleUserDisconnect ─────────────────────────────────────────────
-  async handleUserDisconnect(userId: string, redis: Redis, server: any) {
-    this.logger.log(`[disconnect] userId=${userId}`);
-    await this.leaveQueue(userId, redis);
+  /**
+   * Called when a socket disconnects. Instead of immediately destroying state,
+   * waits DISCONNECT_GRACE_MS. If the user reconnects (mobile tab switch,
+   * network blip), cancelDisconnect() cancels the cleanup and the user stays
+   * in the queue seamlessly.
+   */
+  handleUserDisconnect(userId: string, redis: Redis, server: any) {
+    // Cancel any existing timer for this user (in case of rapid disconnect/reconnect)
+    this.cancelDisconnect(userId);
 
-    const matchId = this.userToMatch.get(userId);
-    if (matchId) {
-      await this.endMatch(matchId, userId, 'partner_disconnected', redis, server);
+    this.logger.log(`[disconnect] userId=${userId} — starting ${DISCONNECT_GRACE_MS}ms grace period`);
+
+    const timer = setTimeout(async () => {
+      this.disconnectTimers.delete(userId);
+      this.logger.log(`[disconnect] grace period expired for userId=${userId} — cleaning up`);
+
+      await this.leaveQueue(userId, redis);
+
+      const matchId = this.userToMatch.get(userId);
+      if (matchId) {
+        await this.endMatch(matchId, userId, 'partner_disconnected', redis, server);
+      }
+
+      await redis.srem(MATCHED_SET, userId);
+    }, DISCONNECT_GRACE_MS);
+
+    this.disconnectTimers.set(userId, timer);
+  }
+
+  /**
+   * Called when a user reconnects. Cancels the pending disconnect cleanup
+   * so queue/match state is preserved across mobile network blips.
+   */
+  cancelDisconnect(userId: string) {
+    const timer = this.disconnectTimers.get(userId);
+    if (timer) {
+      clearTimeout(timer);
+      this.disconnectTimers.delete(userId);
+      this.logger.log(`[reconnect] cancelled disconnect cleanup for userId=${userId}`);
     }
+  }
 
-    await redis.srem(MATCHED_SET, userId);
+  /**
+   * If the user already has an active match (e.g. matched during a brief disconnect),
+   * resend the match_found event so the client can navigate to the call page.
+   * Returns true if a match was resent.
+   */
+  async resendMatchIfExists(userId: string, server: any): Promise<boolean> {
+    const matchId = this.userToMatch.get(userId);
+    if (!matchId) return false;
+
+    const match = this.activeMatches.get(matchId);
+    if (!match) return false;
+
+    const token = await this.voiceService.createToken(match.roomName, userId);
+    const partnerId = match.user1Id === userId ? match.user2Id : match.user1Id;
+
+    server.to(`user:${userId}`).emit('match_found', {
+      matchId,
+      roomName: match.roomName,
+      token,
+      livekitUrl: process.env.LIVEKIT_URL,
+      partnerId,
+    });
+
+    this.logger.log(`[resendMatch] resent match_found to userId=${userId} matchId=${matchId}`);
+    return true;
   }
 
   getMatchIdForUser(userId: string): string | undefined {

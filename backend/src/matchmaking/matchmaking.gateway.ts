@@ -68,6 +68,13 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       });
       client.data.userId = payload.sub;
       client.join(`user:${payload.sub}`);
+
+      // Cancel any pending disconnect cleanup — user reconnected in time
+      this.matchmakingService.cancelDisconnect(payload.sub);
+
+      // If user was matched during a brief disconnect, resend the match_found event
+      await this.matchmakingService.resendMatchIfExists(payload.sub, this.server);
+
       this.logger.log(`[connect] userId=${payload.sub} socketId=${client.id} transport=${client.conn.transport.name}`);
     } catch (err: any) {
       this.logger.warn(`[connect] auth failed: ${err.message} — disconnecting ${client.id}`);

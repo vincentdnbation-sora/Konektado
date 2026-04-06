@@ -14,9 +14,11 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var MatchmakingGateway_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MatchmakingGateway = void 0;
 const websockets_1 = require("@nestjs/websockets");
+const common_1 = require("@nestjs/common");
 const socket_io_1 = require("socket.io");
 const jwt_1 = require("@nestjs/jwt");
 const matchmaking_service_1 = require("./matchmaking.service");
@@ -27,52 +29,99 @@ const ALLOWED_ORIGINS = [
     'https://konektado-beta.vercel.app',
     process.env.FRONTEND_URL,
 ].filter(Boolean);
-let MatchmakingGateway = class MatchmakingGateway {
+let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
     matchmakingService;
     jwtService;
     server;
+    logger = new common_1.Logger(MatchmakingGateway_1.name);
     redis = new ioredis_1.default(process.env.REDIS_URL || 'redis://localhost:6379');
-    matchInterval;
     constructor(matchmakingService, jwtService) {
         this.matchmakingService = matchmakingService;
         this.jwtService = jwtService;
+        setInterval(() => {
+            this.matchmakingService.runMatchmaking(this.redis, this.server);
+        }, 200);
     }
     async handleConnection(client) {
         try {
             const token = client.handshake.auth?.token;
+            if (!token) {
+                this.logger.warn(`[connect] no token — disconnecting ${client.id}`);
+                client.disconnect();
+                return;
+            }
             const payload = this.jwtService.verify(token, {
                 secret: process.env.JWT_SECRET || 'secret',
             });
             client.data.userId = payload.sub;
             client.join(`user:${payload.sub}`);
+            this.matchmakingService.cancelDisconnect(payload.sub);
+            await this.matchmakingService.resendMatchIfExists(payload.sub, this.server);
+            this.logger.log(`[connect] userId=${payload.sub} socketId=${client.id} transport=${client.conn.transport.name}`);
         }
-        catch {
+        catch (err) {
+            this.logger.warn(`[connect] auth failed: ${err.message} — disconnecting ${client.id}`);
             client.disconnect();
         }
     }
     async handleDisconnect(client) {
-        if (client.data.userId) {
-            await this.matchmakingService.handleUserDisconnect(client.data.userId, this.redis, this.server);
-        }
+        if (!client.data.userId)
+            return;
+        this.logger.log(`[disconnect] userId=${client.data.userId} socketId=${client.id}`);
+        await this.matchmakingService.handleUserDisconnect(client.data.userId, this.redis, this.server);
     }
     async joinQueue(client, data) {
-        const result = await this.matchmakingService.joinQueue(client.data.userId, data, this.redis);
-        client.emit('queue_status', result);
-        this.matchmakingService.runMatchmaking(this.redis, this.server);
+        const userId = client.data.userId;
+        if (!userId)
+            return;
+        this.logger.log(`[join_queue] userId=${userId}`);
+        try {
+            const result = await this.matchmakingService.joinQueue(userId, data, this.redis, this.server);
+            if (result.status === 'queued') {
+                client.emit('queue_status', { status: 'queued' });
+            }
+        }
+        catch (err) {
+            this.logger.error(`[join_queue] error for userId=${userId}: ${err.message}`);
+            client.emit('queue_status', { status: 'error', message: err.message });
+        }
     }
     async leaveQueue(client) {
+        if (!client.data.userId)
+            return;
+        this.logger.log(`[leave_queue] userId=${client.data.userId}`);
         await this.matchmakingService.leaveQueue(client.data.userId, this.redis);
         client.emit('queue_status', { status: 'left' });
     }
     async endMatch(client, data) {
-        await this.matchmakingService.endMatch(data.matchId, client.data.userId, data.reason, this.redis);
+        if (!client.data.userId)
+            return;
+        this.logger.log(`[end_match] userId=${client.data.userId} matchId=${data.matchId}`);
         (0, sync_game_1.cleanupGame)(data.matchId);
+        await this.matchmakingService.endMatch(data.matchId, client.data.userId, data.reason || 'user_left', this.redis, this.server);
+    }
+    async nextMatch(client, data) {
+        const userId = client.data.userId;
+        if (!userId)
+            return;
+        this.logger.log(`[next_match] userId=${userId} matchId=${data.matchId}`);
+        if (data.matchId) {
+            (0, sync_game_1.cleanupGame)(data.matchId);
+            await this.matchmakingService.endMatch(data.matchId, userId, 'user_skipped', this.redis, this.server);
+        }
+        try {
+            const result = await this.matchmakingService.joinQueue(userId, { lat: data.lat, lng: data.lng, preferences: data.preferences || {} }, this.redis, this.server);
+            if (result.status === 'queued') {
+                client.emit('queue_status', { status: 'queued' });
+            }
+        }
+        catch (err) {
+            this.logger.error(`[next_match] error for userId=${userId}: ${err.message}`);
+            client.emit('queue_status', { status: 'error', message: err.message });
+        }
     }
     handleGameJump(client, data) {
         (0, sync_game_1.handleJump)(data.matchId, client.data.userId, this.server);
-    }
-    startGameForMatch(matchId, user1Id, user2Id) {
-        (0, sync_game_1.startSyncGame)(matchId, user1Id, user2Id, this.server);
     }
 };
 exports.MatchmakingGateway = MatchmakingGateway;
@@ -104,6 +153,14 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], MatchmakingGateway.prototype, "endMatch", null);
 __decorate([
+    (0, websockets_1.SubscribeMessage)('next_match'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", Promise)
+], MatchmakingGateway.prototype, "nextMatch", null);
+__decorate([
     (0, websockets_1.SubscribeMessage)('game_jump'),
     __param(0, (0, websockets_1.ConnectedSocket)()),
     __param(1, (0, websockets_1.MessageBody)()),
@@ -111,7 +168,7 @@ __decorate([
     __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
     __metadata("design:returntype", void 0)
 ], MatchmakingGateway.prototype, "handleGameJump", null);
-exports.MatchmakingGateway = MatchmakingGateway = __decorate([
+exports.MatchmakingGateway = MatchmakingGateway = MatchmakingGateway_1 = __decorate([
     (0, websockets_1.WebSocketGateway)({
         cors: {
             origin: (origin, callback) => {
@@ -119,11 +176,15 @@ exports.MatchmakingGateway = MatchmakingGateway = __decorate([
                     callback(null, true);
                 }
                 else {
+                    console.error(`[WS-CORS] rejected origin: ${origin}`);
                     callback(new Error(`CORS: ${origin} not allowed`));
                 }
             },
             credentials: true,
         },
+        transports: ['websocket', 'polling'],
+        pingInterval: 10000,
+        pingTimeout: 15000,
     }),
     __metadata("design:paramtypes", [matchmaking_service_1.MatchmakingService,
         jwt_1.JwtService])
