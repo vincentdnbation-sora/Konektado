@@ -48,10 +48,20 @@ export class MatchmakingService {
   }
 
   async runMatchmaking(redis: Redis, server: any) {
+    try {
+      await this._runMatchmaking(redis, server);
+    } catch (err) {
+      this.logger.error('Matchmaking error:', err);
+    }
+  }
+
+  private async _runMatchmaking(redis: Redis, server: any) {
     const queueSize = await redis.zcard(QUEUE_KEY);
+    this.logger.debug(`Queue size: ${queueSize}`);
     if (queueSize < 2) return;
 
     const candidates = await redis.zrange(QUEUE_KEY, 0, -1);
+    this.logger.debug(`Candidates: ${candidates.join(', ')}`);
 
     for (let i = 0; i < candidates.length; i++) {
       const userId = candidates[i];
@@ -86,7 +96,11 @@ export class MatchmakingService {
         const blocked = await this.isBlocked(userId, candidateId);
         if (blocked) continue;
 
-        await this.createMatch(userId, candidateId, redis, server);
+        try {
+          await this.createMatch(userId, candidateId, redis, server);
+        } catch (err) {
+          this.logger.error(`createMatch failed for ${userId} <-> ${candidateId}:`, err);
+        }
         break;
       }
     }
