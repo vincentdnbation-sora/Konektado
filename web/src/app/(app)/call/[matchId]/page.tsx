@@ -25,7 +25,7 @@ import { toast } from 'sonner';
  * Inner component — must be rendered inside <LiveKitRoom>.
  * Handles mic capture, remote audio playback, and connection status display.
  */
-function CallRoom({ isMuted, onRetry }: { isMuted: boolean; onRetry: () => void }) {
+function CallRoom({ isMuted, onRetry, micApproved }: { isMuted: boolean; onRetry: () => void; micApproved: boolean }) {
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
@@ -125,13 +125,14 @@ function CallRoom({ isMuted, onRetry }: { isMuted: boolean; onRetry: () => void 
     });
   }, [connectionState, room]);
 
-  // Enable microphone AFTER room is connected (not during connect handshake)
+  // Enable microphone AFTER room is connected — only if mic was pre-approved
   useEffect(() => {
     if (!localParticipant || micEnabled.current) return;
     if (connectionState !== ConnectionState.Connected) return;
+    if (!micApproved) return;
 
     micEnabled.current = true;
-    console.log('[CallRoom] enabling microphone...');
+    console.log('[CallRoom] enabling microphone (pre-approved)...');
 
     localParticipant
       .setMicrophoneEnabled(true)
@@ -143,7 +144,7 @@ function CallRoom({ isMuted, onRetry }: { isMuted: boolean; onRetry: () => void 
         console.error('[CallRoom] mic enable failed:', err);
         toast.error('Microphone access denied — check browser permissions');
       });
-  }, [localParticipant, connectionState]);
+  }, [localParticipant, connectionState, micApproved]);
 
   // Handle mute/unmute
   useEffect(() => {
@@ -257,6 +258,37 @@ export default function CallPage() {
   const [lkConnected, setLkConnected] = useState(false);
   const wasEverConnected = useRef(false);
   const [connectKey, setConnectKey] = useState(0);
+
+  // Mic permission gate: user must tap to grant mic before LiveKit connects
+  const [micApproved, setMicApproved] = useState(false);
+  const [micDenied, setMicDenied] = useState(false);
+  const [micRequesting, setMicRequesting] = useState(false);
+
+  const requestMicPermission = useCallback(async () => {
+    console.log('[CallPage] mic permission request started (user gesture)');
+    setMicRequesting(true);
+    setMicDenied(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Immediately stop the tracks — LiveKit will create its own
+      stream.getTracks().forEach((t) => t.stop());
+      console.log('[CallPage] mic permission granted');
+      setMicApproved(true);
+      toast.success('Microphone ready!');
+    } catch (err: any) {
+      console.error('[CallPage] mic permission denied:', err?.name, err?.message);
+      setMicDenied(true);
+      if (err?.name === 'NotAllowedError') {
+        toast.error('Microphone access denied — please allow in browser settings');
+      } else if (err?.name === 'NotFoundError') {
+        toast.error('No microphone found on this device');
+      } else {
+        toast.error(`Microphone error: ${err?.message || 'unknown'}`);
+      }
+    } finally {
+      setMicRequesting(false);
+    }
+  }, []);
 
   // Stable bar heights so the sound wave doesn't flicker on re-render
   const barHeights = useRef<number[]>(
@@ -378,6 +410,39 @@ export default function CallPage() {
     );
   }
 
+  // Show mic permission gate before connecting to LiveKit
+  if (!micApproved) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center min-h-[60vh] max-w-sm mx-auto gap-6">
+        <div className="w-28 h-28 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center text-5xl shadow-xl shadow-pink-500/20">
+          🎤
+        </div>
+        <h2 className="text-2xl font-bold">Match found!</h2>
+        <p className="text-muted-foreground">
+          Tap the button below to enable your microphone and start talking.
+        </p>
+        {micDenied && (
+          <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 w-full">
+            Microphone access was denied. Please check your browser settings and try again.
+          </div>
+        )}
+        <Button
+          onClick={requestMicPermission}
+          disabled={micRequesting}
+          className="bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0 rounded-full px-8 py-6 text-lg w-full"
+        >
+          {micRequesting ? 'Requesting access...' : micDenied ? 'Retry Microphone' : 'Start Voice Chat'}
+        </Button>
+        <button
+          onClick={() => { handleEndCall('user_left'); }}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          Leave call
+        </button>
+      </div>
+    );
+  }
+
   console.log('[CallPage] rendering LiveKitRoom', {
     serverUrl: livekitUrl,
     tokenLength: livekitToken?.length,
@@ -441,6 +506,7 @@ export default function CallPage() {
         {/* Partner status + audio renderer */}
         <CallRoom
           isMuted={isMuted}
+          micApproved={micApproved}
           onRetry={() => {
             wasEverConnected.current = false;
             setConnectKey((k) => k + 1);
