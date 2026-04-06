@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  fcmToken     String?   @map("fcm_token")
+  isBanned     Boolean   @default(false) @map("is_banned")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastActive   DateTime? @map("last_active")
+
+  profile     Profile?
+  preferences Preferences?
+  matchesAs1  Match[]      @relation("User1Matches")
+  matchesAs2  Match[]      @relation("User2Matches")
+  reports     Report[]     @relation("ReporterReports")
+  reported    Report[]     @relation("ReportedReports")
+  blockedBy   Block[]      @relation("BlockerBlocks")
+  blocking    Block[]      @relation("BlockedBlocks")
+
+  @@map("users")
+}
+
+model Profile {
+  id          String  @id @default(uuid())
+  userId      String  @unique @map("user_id")
+  displayName String  @map("display_name")
+  bio         String?
+  age         Int
+  gender      String
+  photoUrl    String? @map("photo_url")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Preferences {
+  id              String @id @default(uuid())
+  userId          String @unique @map("user_id")
+  preferredGender String @default("any") @map("preferred_gender")
+  minAge          Int    @default(18) @map("min_age")
+  maxAge          Int    @default(99) @map("max_age")
+  maxDistanceKm   Int    @default(50) @map("max_distance_km")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("preferences")
+}
+
+model Match {
+  id              String    @id @default(uuid())
+  user1Id         String    @map("user1_id")
+  user2Id         String    @map("user2_id")
+  status          String    @default("active")
+  livekitRoomName String?   @map("livekit_room_name")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  endedAt         DateTime? @map("ended_at")
+
+  user1       User         @relation("User1Matches", fields: [user1Id], references: [id])
+  user2       User         @relation("User2Matches", fields: [user2Id], references: [id])
+  session     Session?
+  gameSession GameSession?
+  reports     Report[]
+
+  @@map("matches")
+}
+
+model Session {
+  id              String    @id @default(uuid())
+  matchId         String    @unique @map("match_id")
+  startedAt       DateTime  @default(now()) @map("started_at")
+  endedAt         DateTime? @map("ended_at")
+  durationSeconds Int?      @map("duration_seconds")
+  endReason       String?   @map("end_reason")
+
+  match Match @relation(fields: [matchId], references: [id])
+
+  @@map("sessions")
+}
+
+model GameSession {
+  id        String  @id @default(uuid())
+  matchId   String  @unique @map("match_id")
+  gameType  String  @default("would_you_rather") @map("game_type")
+  questions Json
+  answers   Json    @default("{}")
+  scores    Json    @default("{}")
+  completed Boolean @default(false)
+
+  match Match @relation(fields: [matchId], references: [id])
+
+  @@map("game_sessions")
+}
+
+model Report {
+  id          String   @id @default(uuid())
+  reporterId  String   @map("reporter_id")
+  reportedId  String   @map("reported_id")
+  matchId     String?  @map("match_id")
+  reason      String
+  description String?
+  reviewed    Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  reporter User   @relation("ReporterReports", fields: [reporterId], references: [id])
+  reported User   @relation("ReportedReports", fields: [reportedId], references: [id])
+  match    Match? @relation(fields: [matchId], references: [id])
+
+  @@map("reports")
+}
+
+model Block {
+  id        String   @id @default(uuid())
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker User @relation("BlockerBlocks", fields: [blockerId], references: [id])
+  blocked User @relation("BlockedBlocks", fields: [blockedId], references: [id])
+
+  @@unique([blockerId, blockedId])
+  @@map("blocks")
+}
