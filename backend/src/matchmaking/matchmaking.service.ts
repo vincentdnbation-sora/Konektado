@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
 import { VoiceService } from '../voice/voice.service';
