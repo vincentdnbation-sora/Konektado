@@ -10,78 +10,159 @@ import {
   RoomAudioRenderer,
   useLocalParticipant,
   useRemoteParticipants,
+  useConnectionState,
+  useTracks,
 } from '@livekit/components-react';
+import { ConnectionState, Track } from 'livekit-client';
 import '@livekit/components-styles';
 import CallControls from '@/components/call/CallControls';
 import MiniGame from '@/components/call/MiniGame';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
+/**
+ * Inner component — must be rendered inside <LiveKitRoom>.
+ * Handles mic capture, remote audio playback, and connection status display.
+ */
 function CallRoom({ isMuted }: { isMuted: boolean }) {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
+  const connectionState = useConnectionState();
   const partnerConnected = remoteParticipants.length > 0;
+
+  // Track published audio tracks (local + remote) for debugging
+  const audioTracks = useTracks([Track.Source.Microphone], { onlySubscribed: false });
+
   const micEnabled = useRef(false);
-  const [audioUnlocked, setAudioUnlocked] = useState(false);
 
-  // Unlock audio on first user tap (required for iOS Safari autoplay)
-  const unlockAudio = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      ctx.resume().then(() => setAudioUnlocked(true)).catch(() => {});
-      // Also resume any existing suspended contexts
-      if (typeof document !== 'undefined') {
-        document.querySelectorAll('audio').forEach((el) => {
-          (el as HTMLAudioElement).play().catch(() => {});
-        });
-      }
-    } catch {}
-    setAudioUnlocked(true);
-  }, []);
+  // Log connection state changes
+  useEffect(() => {
+    console.log('[CallRoom] connectionState:', connectionState);
+  }, [connectionState]);
 
+  // Log remote participants
+  useEffect(() => {
+    console.log('[CallRoom] remoteParticipants:', remoteParticipants.length);
+    remoteParticipants.forEach((p) => {
+      console.log(`[CallRoom] remote: ${p.identity} audioTracks=${p.audioTrackPublications.size}`);
+    });
+  }, [remoteParticipants]);
+
+  // Log audio tracks
+  useEffect(() => {
+    console.log('[CallRoom] audioTracks:', audioTracks.length);
+    audioTracks.forEach((t) => {
+      console.log(`[CallRoom] track: participant=${t.participant.identity} source=${t.source} subscribed=${t.publication?.isSubscribed}`);
+    });
+  }, [audioTracks]);
+
+  // Enable microphone AFTER room is connected (not during connect handshake)
   useEffect(() => {
     if (!localParticipant || micEnabled.current) return;
+    if (connectionState !== ConnectionState.Connected) return;
+
     micEnabled.current = true;
+    console.log('[CallRoom] enabling microphone...');
 
-    // Let LiveKit handle getUserMedia — avoid double permission prompts on mobile
-    localParticipant.setMicrophoneEnabled(true).catch((err) => {
-      console.warn('[CallRoom] mic enable failed:', err);
-      toast.error('Microphone access failed — check browser permissions');
-    });
-  }, [localParticipant]);
+    localParticipant
+      .setMicrophoneEnabled(true)
+      .then(() => {
+        console.log('[CallRoom] microphone enabled successfully');
+        toast.success('Microphone active');
+      })
+      .catch((err) => {
+        console.error('[CallRoom] mic enable failed:', err);
+        toast.error('Microphone access denied — check browser permissions');
+      });
+  }, [localParticipant, connectionState]);
 
+  // Handle mute/unmute
   useEffect(() => {
     if (!localParticipant || !micEnabled.current) return;
     localParticipant.setMicrophoneEnabled(!isMuted).catch(() => {});
   }, [isMuted, localParticipant]);
 
+  // Unlock AudioContext on ANY user interaction (handles iOS autoplay)
+  useEffect(() => {
+    const unlock = () => {
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        if (ctx.state === 'suspended') {
+          ctx.resume().then(() => console.log('[CallRoom] AudioContext resumed via user gesture'));
+        }
+      } catch {}
+      // Also force-play any LiveKit audio elements
+      document.querySelectorAll('audio').forEach((el) => {
+        const audio = el as HTMLAudioElement;
+        if (audio.paused && audio.srcObject) {
+          audio.play().then(() => console.log('[CallRoom] force-played audio element')).catch(() => {});
+        }
+      });
+    };
+
+    document.addEventListener('click', unlock, { once: false, passive: true });
+    document.addEventListener('touchstart', unlock, { once: false, passive: true });
+
+    return () => {
+      document.removeEventListener('click', unlock);
+      document.removeEventListener('touchstart', unlock);
+    };
+  }, []);
+
+  const isConnecting = connectionState === ConnectionState.Connecting;
+  const isConnected = connectionState === ConnectionState.Connected;
+  const isDisconnected = connectionState === ConnectionState.Disconnected;
+
   return (
     <div className="w-full flex flex-col items-center gap-2">
-      {/* RoomAudioRenderer plays all remote audio tracks */}
+      {/* CRITICAL: RoomAudioRenderer creates <audio> elements for every remote audio track */}
       <RoomAudioRenderer />
 
-      {/* iOS Safari requires a user gesture to unlock audio playback */}
-      {!audioUnlocked && (
-        <button
-          onClick={unlockAudio}
-          className="bg-violet-500/10 border border-violet-500/30 rounded-xl px-5 py-3 text-sm text-violet-400 w-full text-center animate-pulse"
-        >
-          🔊 Tap here to enable audio
-        </button>
+      {/* Connection state indicator */}
+      {isConnecting && (
+        <div className="flex items-center gap-2 text-sm text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-full px-4 py-2">
+          <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+          Connecting to voice server...
+        </div>
       )}
 
-      {!partnerConnected && (
+      {isDisconnected && (
+        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-4 py-2">
+          <span className="w-2 h-2 rounded-full bg-red-500" />
+          Voice disconnected
+        </div>
+      )}
+
+      {isConnected && !partnerConnected && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground bg-card border border-border rounded-full px-4 py-2">
           <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-          Connecting partner...
+          Waiting for partner to connect...
         </div>
       )}
-      {partnerConnected && (
+
+      {isConnected && partnerConnected && (
         <div className="flex items-center gap-2 text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-full px-4 py-2">
           <span className="w-2 h-2 rounded-full bg-green-500" />
-          Partner connected — just talk!
+          Partner connected — talk!
         </div>
       )}
+
+      {/* Tap prompt for mobile — ensures AudioContext is unlocked */}
+      <button
+        onClick={() => {
+          toast.success('Audio enabled!');
+          // Force re-check audio elements
+          document.querySelectorAll('audio').forEach((el) => {
+            const audio = el as HTMLAudioElement;
+            if (audio.paused && audio.srcObject) {
+              audio.play().catch(() => {});
+            }
+          });
+        }}
+        className="bg-violet-500/10 border border-violet-500/30 rounded-xl px-5 py-3 text-sm text-violet-400 w-full text-center"
+      >
+        🔊 Tap here if you can&apos;t hear audio
+      </button>
     </div>
   );
 }
@@ -225,6 +306,7 @@ export default function CallPage() {
   }
 
   if (!livekitToken || !livekitUrl) {
+    console.warn('[CallPage] no livekitToken or livekitUrl', { livekitToken: !!livekitToken, livekitUrl });
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -235,12 +317,18 @@ export default function CallPage() {
     );
   }
 
+  console.log('[CallPage] rendering LiveKitRoom', {
+    serverUrl: livekitUrl,
+    tokenLength: livekitToken?.length,
+    tokenPrefix: livekitToken?.substring(0, 20),
+  });
+
   return (
     <LiveKitRoom
       token={livekitToken}
       serverUrl={livekitUrl}
       connect={true}
-      audio={true}
+      audio={false}
       video={false}
       options={{
         audioCaptureDefaults: {
@@ -251,13 +339,17 @@ export default function CallPage() {
       }}
       onConnected={() => {
         setLkConnected(true);
-        console.log('[LiveKit] connected to room');
+        console.log('[LiveKit] connected to room successfully');
+        toast.success('Voice connected!');
       }}
       onError={(err) => {
-        console.error('[LiveKit] error:', err);
-        toast.error('Voice connection failed — retrying...');
+        console.error('[LiveKit] room error:', err);
+        toast.error(`Voice error: ${err?.message || 'unknown'}`);
       }}
-      onDisconnected={() => handleEndCall('disconnected')}
+      onDisconnected={() => {
+        console.log('[LiveKit] disconnected from room');
+        handleEndCall('disconnected');
+      }}
     >
       <div className="flex-1 flex flex-col items-center px-4 py-8 max-w-md mx-auto w-full gap-6">
         {/* Live timer */}
