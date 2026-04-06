@@ -12,6 +12,7 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { MatchmakingService } from './matchmaking.service';
 import { handleJump, cleanupGame } from './sync-game';
+import { startMemoryGame, handleMemoryFlip, cleanupMemoryGame } from './memory-game';
 import Redis from 'ioredis';
 
 const ALLOWED_ORIGINS = [
@@ -127,6 +128,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     if (!client.data.userId) return;
     this.logger.log(`[end_match] userId=${client.data.userId} matchId=${data.matchId}`);
     cleanupGame(data.matchId);
+    cleanupMemoryGame(data.matchId);
     await this.matchmakingService.endMatch(
       data.matchId,
       client.data.userId,
@@ -148,6 +150,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
 
     if (data.matchId) {
       cleanupGame(data.matchId);
+      cleanupMemoryGame(data.matchId);
       await this.matchmakingService.endMatch(
         data.matchId,
         userId,
@@ -180,5 +183,26 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     @MessageBody() data: { matchId: string },
   ) {
     handleJump(data.matchId, client.data.userId, this.server);
+  }
+
+  @SubscribeMessage('memory:start')
+  handleMemoryStart(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string; partnerId: string },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.matchId || !data.partnerId) return;
+    this.logger.log(`[memory:start] userId=${userId} matchId=${data.matchId}`);
+    startMemoryGame(data.matchId, userId, data.partnerId, this.server);
+  }
+
+  @SubscribeMessage('memory:flip')
+  handleMemoryFlip(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { matchId: string; cardIndex: number },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.matchId || data.cardIndex == null) return;
+    handleMemoryFlip(data.matchId, userId, data.cardIndex, this.server);
   }
 }

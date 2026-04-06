@@ -18,6 +18,7 @@ import { ConnectionState, Track, RoomEvent } from 'livekit-client';
 import '@livekit/components-styles';
 import CallControls from '@/components/call/CallControls';
 import MiniGame from '@/components/call/MiniGame';
+import MemoryGame from '@/components/call/MemoryGame';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
@@ -281,6 +282,7 @@ export default function CallPage() {
   const [lkConnected, setLkConnected] = useState(false);
   const wasEverConnected = useRef(false);
   const [connectKey, setConnectKey] = useState(0);
+  const [activeGame, setActiveGame] = useState<'jump' | 'memory'>('memory');
 
   // Mic permission gate: user must tap to grant mic before LiveKit connects
   const [micApproved, setMicApproved] = useState(false);
@@ -615,9 +617,35 @@ export default function CallPage() {
           }}
         />
 
-        {/* Fix 1: Mini-game — was never rendered, game events from server went unhandled */}
-        <div className="w-full">
-          <MiniGame matchId={matchId} userId={user?.id ?? ''} />
+        {/* Fix 1: Mini-games — game selector tabs + active game */}
+        <div className="w-full space-y-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveGame('memory')}
+              className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                activeGame === 'memory'
+                  ? 'bg-violet-500/15 text-violet-400 border border-violet-500/30'
+                  : 'bg-muted/40 text-muted-foreground border border-border'
+              }`}
+            >
+              🃏 Memory
+            </button>
+            <button
+              onClick={() => setActiveGame('jump')}
+              className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                activeGame === 'jump'
+                  ? 'bg-violet-500/15 text-violet-400 border border-violet-500/30'
+                  : 'bg-muted/40 text-muted-foreground border border-border'
+              }`}
+            >
+              🏃 Jump
+            </button>
+          </div>
+          {activeGame === 'memory' ? (
+            <MemoryGame matchId={matchId} userId={user?.id ?? ''} partnerId={partnerId ?? ''} />
+          ) : (
+            <MiniGame matchId={matchId} userId={user?.id ?? ''} />
+          )}
         </div>
 
         {/* Sound wave visualizer */}
