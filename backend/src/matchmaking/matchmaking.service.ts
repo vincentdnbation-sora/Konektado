@@ -207,7 +207,8 @@ export class MatchmakingService {
     this.userToMatch.set(user1Id, matchId);
     this.userToMatch.set(user2Id, matchId);
 
-    const livekitUrl = process.env.LIVEKIT_URL;
+    const livekitUrl = process.env.LIVEKIT_URL || 'wss://dating-app-46dvc6ij.livekit.cloud';
+    this.logger.log(`[createMatch] livekitUrl=${livekitUrl}`);
 
     // Emit match_found to both users immediately
     server.to(`user:${user1Id}`).emit('match_found', {
@@ -332,7 +333,7 @@ export class MatchmakingService {
       matchId,
       roomName: match.roomName,
       token,
-      livekitUrl: process.env.LIVEKIT_URL,
+      livekitUrl: process.env.LIVEKIT_URL || 'wss://dating-app-46dvc6ij.livekit.cloud',
       partnerId,
     });
 

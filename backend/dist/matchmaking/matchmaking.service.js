@@ -161,7 +161,8 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
         this.activeMatches.set(matchId, matchRecord);
         this.userToMatch.set(user1Id, matchId);
         this.userToMatch.set(user2Id, matchId);
-        const livekitUrl = process.env.LIVEKIT_URL;
+        const livekitUrl = process.env.LIVEKIT_URL || 'wss://dating-app-46dvc6ij.livekit.cloud';
+        this.logger.log(`[createMatch] livekitUrl=${livekitUrl}`);
         server.to(`user:${user1Id}`).emit('match_found', {
             matchId, roomName, token: token1, livekitUrl, partnerId: user2Id,
         });
@@ -244,7 +245,7 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
             matchId,
             roomName: match.roomName,
             token,
-            livekitUrl: process.env.LIVEKIT_URL,
+            livekitUrl: process.env.LIVEKIT_URL || 'wss://dating-app-46dvc6ij.livekit.cloud',
             partnerId,
         });
         this.logger.log(`[resendMatch] resent match_found to userId=${userId} matchId=${matchId}`);
