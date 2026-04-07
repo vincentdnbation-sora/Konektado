@@ -75,6 +75,18 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       // Cancel any pending disconnect cleanup — user reconnected in time
       this.matchmakingService.cancelDisconnect(payload.sub);
 
+      // Track active user presence (idempotent — no double-count on reconnect)
+      this.matchmakingService.addActiveUser(payload.sub);
+      this.matchmakingService.broadcastPresence(this.server, this.redis);
+
+      // Send current count directly to the connecting client
+      const active = this.matchmakingService.getActiveUserCount();
+      this.redis.zcard('matchmaking:queue').then((searching) => {
+        client.emit('presence:update', { active, searching });
+      }).catch(() => {
+        client.emit('presence:update', { active, searching: 0 });
+      });
+
       // If user was matched during a brief disconnect, resend the match_found event
       await this.matchmakingService.resendMatchIfExists(payload.sub, this.server);
 
@@ -108,6 +120,8 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       if (result.status === 'queued') {
         client.emit('queue_status', { status: 'queued' });
       }
+      // Broadcast updated searching count
+      this.matchmakingService.broadcastPresence(this.server, this.redis);
     } catch (err: any) {
       this.logger.error(`[join_queue] error for userId=${userId}: ${err.message}`);
       client.emit('queue_status', { status: 'error', message: err.message });
@@ -120,6 +134,8 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     this.logger.log(`[leave_queue] userId=${client.data.userId}`);
     await this.matchmakingService.leaveQueue(client.data.userId, this.redis);
     client.emit('queue_status', { status: 'left' });
+    // Broadcast updated searching count
+    this.matchmakingService.broadcastPresence(this.server, this.redis);
   }
 
   @SubscribeMessage('end_match')

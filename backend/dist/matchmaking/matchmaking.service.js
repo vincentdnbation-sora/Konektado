@@ -27,9 +27,47 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
     userToMatch = new Map();
     tearingDown = new Set();
     disconnectTimers = new Map();
+    activeUsers = new Set();
     constructor(prisma, voiceService) {
         this.prisma = prisma;
         this.voiceService = voiceService;
+    }
+    addActiveUser(userId) {
+        if (this.activeUsers.has(userId)) {
+            this.logger.log(`[presence] duplicate connect ignored for userId=${userId} (already active)`);
+            return false;
+        }
+        this.activeUsers.add(userId);
+        this.logger.log(`[presence] active user added: userId=${userId} total=${this.activeUsers.size}`);
+        return true;
+    }
+    removeActiveUser(userId) {
+        if (!this.activeUsers.has(userId))
+            return false;
+        this.activeUsers.delete(userId);
+        this.logger.log(`[presence] active user removed: userId=${userId} total=${this.activeUsers.size}`);
+        return true;
+    }
+    getActiveUserCount() {
+        return this.activeUsers.size;
+    }
+    async getSearchingCount(redis) {
+        return redis.zcard(QUEUE_KEY);
+    }
+    broadcastPresence(server, redis) {
+        const count = this.getActiveUserCount();
+        const payload = { active: count };
+        if (redis) {
+            redis.zcard(QUEUE_KEY).then((searching) => {
+                server.emit('presence:update', { active: count, searching });
+            }).catch(() => {
+                server.emit('presence:update', payload);
+            });
+        }
+        else {
+            server.emit('presence:update', payload);
+        }
+        this.logger.log(`[presence] broadcast active=${count}`);
     }
     async forceCleanupUser(userId, redis) {
         this.logger.log(`[forceCleanup] userId=${userId} — clearing all stale state`);
@@ -353,6 +391,8 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
                 this.logger.log(`[disconnect] no active match for userId=${userId} — cleaning stale refs`);
             }
             await this.forceCleanupUser(userId, redis);
+            this.removeActiveUser(userId);
+            this.broadcastPresence(server, redis);
         }, DISCONNECT_GRACE_MS);
         this.disconnectTimers.set(userId, timer);
     }
@@ -361,7 +401,7 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
         if (timer) {
             clearTimeout(timer);
             this.disconnectTimers.delete(userId);
-            this.logger.log(`[reconnect] cancelled disconnect cleanup for userId=${userId}`);
+            this.logger.log(`[reconnect] cancelled disconnect cleanup for userId=${userId} — kept active user alive`);
         }
     }
     async resendMatchIfExists(userId, server) {

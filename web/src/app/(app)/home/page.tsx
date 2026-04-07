@@ -13,6 +13,10 @@ export default function HomePage() {
   const { user } = useAuthStore();
   const { queueStatus, setQueueStatus, setMatch, setLastLocation } = useMatchStore();
 
+  // Active user presence
+  const [activeCount, setActiveCount] = useState<number | null>(null);
+  const [searchingCount, setSearchingCount] = useState<number | null>(null);
+
   // Preload geolocation in the background the moment the page mounts.
   // By the time the user clicks the button, the position is usually ready.
   const locationRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -38,6 +42,11 @@ export default function HomePage() {
   useEffect(() => {
     const socket = connectSocket();
 
+    const onPresenceUpdate = (data: { active: number; searching?: number }) => {
+      setActiveCount(data.active);
+      if (data.searching !== undefined) setSearchingCount(data.searching);
+    };
+
     // Named reference so socket.off removes exactly this handler, not all listeners
     const onMatchFound = (data: any) => {
       setMatch(data);
@@ -45,9 +54,11 @@ export default function HomePage() {
       router.push(`/call/${data.matchId}`);
     };
 
+    socket.on('presence:update', onPresenceUpdate);
     socket.on('match_found', onMatchFound);
 
     return () => {
+      socket.off('presence:update', onPresenceUpdate);
       socket.off('match_found', onMatchFound);
     };
   }, [setMatch, router]);
@@ -79,6 +90,25 @@ export default function HomePage() {
         <p className="text-muted-foreground text-lg leading-relaxed">
           Ready to meet someone new? Press the button and we'll find someone to talk to.
         </p>
+
+        {/* Active users indicator */}
+        {activeCount !== null && activeCount > 0 && (
+          <div className="mt-4 flex items-center justify-center gap-3 text-sm">
+            <div className="flex items-center gap-1.5 text-green-500">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+              </span>
+              <span className="font-medium">{activeCount} {activeCount === 1 ? 'person' : 'people'} online</span>
+            </div>
+            {searchingCount !== null && searchingCount > 0 && (
+              <span className="text-muted-foreground">
+                · {searchingCount} searching
+              </span>
+            )}
+          </div>
+        )}
+
         {locationStatus === 'denied' && (
           <p className="text-xs text-muted-foreground mt-3 bg-muted rounded-lg px-3 py-2 inline-block">
             📍 Location denied — matching globally instead

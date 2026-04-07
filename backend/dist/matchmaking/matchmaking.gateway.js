@@ -59,6 +59,14 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
             client.data.userId = payload.sub;
             client.join(`user:${payload.sub}`);
             this.matchmakingService.cancelDisconnect(payload.sub);
+            this.matchmakingService.addActiveUser(payload.sub);
+            this.matchmakingService.broadcastPresence(this.server, this.redis);
+            const active = this.matchmakingService.getActiveUserCount();
+            this.redis.zcard('matchmaking:queue').then((searching) => {
+                client.emit('presence:update', { active, searching });
+            }).catch(() => {
+                client.emit('presence:update', { active, searching: 0 });
+            });
             await this.matchmakingService.resendMatchIfExists(payload.sub, this.server);
             this.logger.log(`[connect] userId=${payload.sub} socketId=${client.id} transport=${client.conn.transport.name}`);
         }
@@ -83,6 +91,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
             if (result.status === 'queued') {
                 client.emit('queue_status', { status: 'queued' });
             }
+            this.matchmakingService.broadcastPresence(this.server, this.redis);
         }
         catch (err) {
             this.logger.error(`[join_queue] error for userId=${userId}: ${err.message}`);
@@ -95,6 +104,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
         this.logger.log(`[leave_queue] userId=${client.data.userId}`);
         await this.matchmakingService.leaveQueue(client.data.userId, this.redis);
         client.emit('queue_status', { status: 'left' });
+        this.matchmakingService.broadcastPresence(this.server, this.redis);
     }
     async endMatch(client, data) {
         if (!client.data.userId)

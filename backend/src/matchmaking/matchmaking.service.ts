@@ -31,10 +31,56 @@ export class MatchmakingService {
   /** Pending disconnect timers — cancelled if user reconnects within grace period */
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
 
+  /** Currently connected users (by userId) — for active user count */
+  private readonly activeUsers = new Set<string>();
+
   constructor(
     private prisma: PrismaService,
     private voiceService: VoiceService,
   ) {}
+
+  // ─── Presence tracking ────────────────────────────────────────────────
+
+  addActiveUser(userId: string): boolean {
+    if (this.activeUsers.has(userId)) {
+      this.logger.log(`[presence] duplicate connect ignored for userId=${userId} (already active)`);
+      return false;
+    }
+    this.activeUsers.add(userId);
+    this.logger.log(`[presence] active user added: userId=${userId} total=${this.activeUsers.size}`);
+    return true;
+  }
+
+  removeActiveUser(userId: string): boolean {
+    if (!this.activeUsers.has(userId)) return false;
+    this.activeUsers.delete(userId);
+    this.logger.log(`[presence] active user removed: userId=${userId} total=${this.activeUsers.size}`);
+    return true;
+  }
+
+  getActiveUserCount(): number {
+    return this.activeUsers.size;
+  }
+
+  async getSearchingCount(redis: Redis): Promise<number> {
+    return redis.zcard(QUEUE_KEY);
+  }
+
+  broadcastPresence(server: any, redis?: Redis) {
+    const count = this.getActiveUserCount();
+    const payload: any = { active: count };
+    // Include searching count if redis is available (best-effort)
+    if (redis) {
+      redis.zcard(QUEUE_KEY).then((searching) => {
+        server.emit('presence:update', { active: count, searching });
+      }).catch(() => {
+        server.emit('presence:update', payload);
+      });
+    } else {
+      server.emit('presence:update', payload);
+    }
+    this.logger.log(`[presence] broadcast active=${count}`);
+  }
 
   // ─── forceCleanupUser ──────────────────────────────────────────────────
   /** Remove ALL stale state for a user so they can cleanly rejoin queue */
@@ -478,6 +524,10 @@ export class MatchmakingService {
 
       // Belt & suspenders: clean all stale state for this user
       await this.forceCleanupUser(userId, redis);
+
+      // Remove from active presence and broadcast updated count
+      this.removeActiveUser(userId);
+      this.broadcastPresence(server, redis);
     }, DISCONNECT_GRACE_MS);
 
     this.disconnectTimers.set(userId, timer);
@@ -492,7 +542,7 @@ export class MatchmakingService {
     if (timer) {
       clearTimeout(timer);
       this.disconnectTimers.delete(userId);
-      this.logger.log(`[reconnect] cancelled disconnect cleanup for userId=${userId}`);
+      this.logger.log(`[reconnect] cancelled disconnect cleanup for userId=${userId} — kept active user alive`);
     }
   }
 
