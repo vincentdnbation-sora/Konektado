@@ -31,8 +31,8 @@ export class MatchmakingService {
   /** Pending disconnect timers — cancelled if user reconnects within grace period */
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
 
-  /** Currently connected users (by userId) — for active user count */
-  private readonly activeUsers = new Set<string>();
+  /** Currently connected users: userId → Set of socketIds */
+  private readonly activeUsers = new Map<string, Set<string>>();
 
   constructor(
     private prisma: PrismaService,
@@ -41,25 +41,49 @@ export class MatchmakingService {
 
   // ─── Presence tracking ────────────────────────────────────────────────
 
-  addActiveUser(userId: string): boolean {
-    if (this.activeUsers.has(userId)) {
-      this.logger.log(`[presence] duplicate connect ignored for userId=${userId} (already active)`);
-      return false;
+  addActiveUser(userId: string, socketId: string): boolean {
+    let sockets = this.activeUsers.get(userId);
+    const isNew = !sockets;
+    if (!sockets) {
+      sockets = new Set();
+      this.activeUsers.set(userId, sockets);
     }
-    this.activeUsers.add(userId);
-    this.logger.log(`[presence] active user added: userId=${userId} total=${this.activeUsers.size}`);
-    return true;
+    sockets.add(socketId);
+    if (isNew) {
+      this.logger.log(`[presence] user online: userId=${userId} total=${this.activeUsers.size}`);
+    } else {
+      this.logger.debug(`[presence] extra socket for userId=${userId} socketId=${socketId} sockets=${sockets.size}`);
+    }
+    return isNew;
+  }
+
+  removeActiveSocket(userId: string, socketId: string): boolean {
+    const sockets = this.activeUsers.get(userId);
+    if (!sockets) return false;
+    sockets.delete(socketId);
+    if (sockets.size === 0) {
+      this.activeUsers.delete(userId);
+      this.logger.log(`[presence] user offline: userId=${userId} total=${this.activeUsers.size}`);
+      return true;
+    }
+    this.logger.debug(`[presence] socket removed for userId=${userId} remaining=${sockets.size}`);
+    return false;
   }
 
   removeActiveUser(userId: string): boolean {
     if (!this.activeUsers.has(userId)) return false;
     this.activeUsers.delete(userId);
-    this.logger.log(`[presence] active user removed: userId=${userId} total=${this.activeUsers.size}`);
+    this.logger.log(`[presence] user offline: userId=${userId} total=${this.activeUsers.size}`);
     return true;
   }
 
   getActiveUserCount(): number {
     return this.activeUsers.size;
+  }
+
+  hasActiveSockets(userId: string): boolean {
+    const sockets = this.activeUsers.get(userId);
+    return !!sockets && sockets.size > 0;
   }
 
   async getSearchingCount(redis: Redis): Promise<number> {
@@ -69,7 +93,6 @@ export class MatchmakingService {
   broadcastPresence(server: any, redis?: Redis) {
     const count = this.getActiveUserCount();
     const payload: any = { active: count };
-    // Include searching count if redis is available (best-effort)
     if (redis) {
       redis.zcard(QUEUE_KEY).then((searching) => {
         server.emit('presence:update', { active: count, searching });
@@ -79,20 +102,20 @@ export class MatchmakingService {
     } else {
       server.emit('presence:update', payload);
     }
-    this.logger.log(`[presence] broadcast active=${count}`);
+    this.logger.debug(`[presence] broadcast active=${count}`);
   }
 
   // ─── forceCleanupUser ──────────────────────────────────────────────────
   /** Remove ALL stale state for a user so they can cleanly rejoin queue */
   async forceCleanupUser(userId: string, redis: Redis) {
-    this.logger.log(`[forceCleanup] userId=${userId} — clearing all stale state`);
+    this.logger.debug(`[forceCleanup] userId=${userId}`);
 
     // Clear stale match references
     const staleMatchId = this.userToMatch.get(userId);
     if (staleMatchId) {
       this.activeMatches.delete(staleMatchId);
       this.userToMatch.delete(userId);
-      this.logger.log(`[forceCleanup] removed stale matchId=${staleMatchId} for userId=${userId}`);
+      this.logger.debug(`[forceCleanup] removed stale matchId=${staleMatchId} for userId=${userId}`);
     }
 
     // Release teardown lock
@@ -113,14 +136,14 @@ export class MatchmakingService {
     redis: Redis,
     server?: any,
   ): Promise<{ status: string }> {
-    this.logger.log(`[joinQueue] userId=${userId}`);
+    this.logger.debug(`[joinQueue] userId=${userId}`);
 
     // ── GUARD: if teardown is in progress, wait briefly then force-clear ──
     if (this.tearingDown.has(userId)) {
-      this.logger.warn(`[joinQueue] user ${userId} teardown in progress — waiting 200ms`);
+      this.logger.debug(`[joinQueue] user ${userId} teardown in progress — waiting 200ms`);
       await new Promise((r) => setTimeout(r, 200));
       if (this.tearingDown.has(userId)) {
-        this.logger.warn(`[joinQueue] teardown still stuck for ${userId} — force-clearing`);
+        this.logger.debug(`[joinQueue] teardown still stuck for ${userId} — force-clearing`);
         this.tearingDown.delete(userId);
       }
     }
@@ -129,15 +152,14 @@ export class MatchmakingService {
     const existingMatchId = this.userToMatch.get(userId);
     if (existingMatchId) {
       if (this.activeMatches.has(existingMatchId)) {
-        // Match is genuinely active — resend match_found instead of queueing
-        this.logger.warn(`[joinQueue] user ${userId} has active match ${existingMatchId} — resending`);
+        this.logger.debug(`[joinQueue] user ${userId} has active match ${existingMatchId} — resending`);
         if (server) {
           await this.resendMatchIfExists(userId, server);
         }
         return { status: 'matched' };
       }
       // Stale match ref (match already ended but ref wasn't cleaned) — clean up
-      this.logger.warn(`[joinQueue] cleaning stale match ref ${existingMatchId} for user ${userId}`);
+      this.logger.debug(`[joinQueue] cleaning stale match ref ${existingMatchId} for user ${userId}`);
       this.userToMatch.delete(userId);
       await redis.srem(MATCHED_SET, userId);
     }
@@ -145,7 +167,7 @@ export class MatchmakingService {
     // ── Clean up any existing queue entry to prevent duplicates ──
     const alreadyInQueue = await redis.zscore(QUEUE_KEY, userId);
     if (alreadyInQueue !== null) {
-      this.logger.log(`[joinQueue] removing existing queue entry for ${userId} before re-inserting`);
+      this.logger.debug(`[joinQueue] removing existing queue entry for ${userId}`);
       await redis.zrem(QUEUE_KEY, userId);
     }
 
@@ -171,14 +193,13 @@ export class MatchmakingService {
     const partnerId = await this.popAvailablePartner(userId, redis);
 
     if (partnerId && server) {
-      this.logger.log(`[joinQueue] instant match: ${userId} <-> ${partnerId}`);
+      this.logger.debug(`[joinQueue] instant match: ${userId} <-> ${partnerId}`);
       await this.createMatch(userId, partnerId, redis, server);
       return { status: 'matched' };
     }
 
-    // No partner available — join the queue and wait for the sweep or the next joiner
     await redis.zadd(QUEUE_KEY, Date.now(), userId);
-    this.logger.log(`[joinQueue] QUEUED userId=${userId}`);
+    this.logger.debug(`[joinQueue] queued userId=${userId}`);
     return { status: 'queued' };
   }
 
@@ -188,7 +209,7 @@ export class MatchmakingService {
       redis.zrem(QUEUE_KEY, userId),
       redis.del(`${USER_DATA_PREFIX}${userId}`),
     ]);
-    this.logger.log(`[leaveQueue] userId=${userId}`);
+    this.logger.debug(`[leaveQueue] userId=${userId}`);
     return { status: 'left' };
   }
 
@@ -228,15 +249,15 @@ export class MatchmakingService {
           if (u2Ok) await redis.zadd(QUEUE_KEY, Date.now(), u2);
           // Clean up bad entries
           if (!u1Ok && exists1 && this.userToMatch.has(u1)) {
-            this.logger.log(`[sweep] removing already-matched user ${u1} from queue`);
+            this.logger.debug(`[sweep] removing already-matched user ${u1}`);
           }
           if (!u2Ok && exists2 && this.userToMatch.has(u2)) {
-            this.logger.log(`[sweep] removing already-matched user ${u2} from queue`);
+            this.logger.debug(`[sweep] removing already-matched user ${u2}`);
           }
           continue;
         }
 
-        this.logger.log(`[sweep] matching ${u1} <-> ${u2}`);
+        this.logger.debug(`[sweep] matching ${u1} <-> ${u2}`);
         await this.createMatch(u1, u2, redis, server);
       }
     } catch (err) {
@@ -295,7 +316,7 @@ export class MatchmakingService {
         }
 
         if (shouldRemove) {
-          this.logger.log(`[prune] removing stale queue entry: userId=${userId} reason=${reason}`);
+          this.logger.debug(`[prune] removing stale: userId=${userId} reason=${reason}`);
           await redis.zrem(QUEUE_KEY, userId);
           await redis.del(`${USER_DATA_PREFIX}${userId}`);
         }
@@ -323,25 +344,25 @@ export class MatchmakingService {
 
       const exists = await redis.exists(`${USER_DATA_PREFIX}${candidateId}`);
       if (!exists) {
-        this.logger.log(`[pop] ghost candidate ${candidateId} — no metadata, skipping`);
+        this.logger.debug(`[pop] ghost candidate ${candidateId}`);
         continue;
       }
 
       const alreadyMatched = await redis.sismember(MATCHED_SET, candidateId);
       if (alreadyMatched) {
-        this.logger.log(`[pop] candidate ${candidateId} already in MATCHED_SET — skipping`);
+        this.logger.debug(`[pop] candidate ${candidateId} already matched`);
         continue;
       }
 
       // Also check in-memory match state (catches races where Redis is behind)
       if (this.userToMatch.has(candidateId)) {
-        this.logger.log(`[pop] candidate ${candidateId} has in-memory match ref — skipping`);
+        this.logger.debug(`[pop] candidate ${candidateId} has in-memory match`);
         continue;
       }
 
       // Reject candidates mid-teardown
       if (this.tearingDown.has(candidateId)) {
-        this.logger.log(`[pop] candidate ${candidateId} is tearing down — skipping`);
+        this.logger.debug(`[pop] candidate ${candidateId} tearing down`);
         continue;
       }
 
@@ -368,7 +389,7 @@ export class MatchmakingService {
     const matchId = randomUUID();
     const roomName = `room-${matchId}`;
 
-    this.logger.log(`[createMatch] ${user1Id} <-> ${user2Id} | matchId=${matchId}`);
+    this.logger.log(`[match] created ${matchId}: ${user1Id} <-> ${user2Id}`);
 
     const [token1, token2] = await Promise.all([
       this.voiceService.createToken(roomName, user1Id),
@@ -390,17 +411,13 @@ export class MatchmakingService {
     this.userToMatch.set(user2Id, matchId);
 
     const livekitUrl = process.env.LIVEKIT_URL || 'wss://dating-app-46dvc6ij.livekit.cloud';
-    this.logger.log(`[createMatch] livekitUrl=${livekitUrl}`);
 
-    // Emit match_found to both users immediately
     server.to(`user:${user1Id}`).emit('match_found', {
       matchId, roomName, token: token1, livekitUrl, partnerId: user2Id,
     });
     server.to(`user:${user2Id}`).emit('match_found', {
       matchId, roomName, token: token2, livekitUrl, partnerId: user1Id,
     });
-
-    this.logger.log(`[createMatch] emitted match_found to both users`);
 
     // Persist to DB in background
     this.persistMatch(matchId, user1Id, user2Id, roomName).catch((err) =>
@@ -419,7 +436,7 @@ export class MatchmakingService {
 
   // ─── endMatch ─────────────────────────────────────────────────────────
   async endMatch(matchId: string, userId: string, reason: string, redis: Redis, server?: any) {
-    this.logger.log(`[endMatch] START matchId=${matchId} userId=${userId} reason=${reason}`);
+    this.logger.log(`[match] ended ${matchId} by=${userId} reason=${reason}`);
 
     const match = this.activeMatches.get(matchId);
 
@@ -447,7 +464,7 @@ export class MatchmakingService {
       // Release teardown lock AFTER all state is cleaned
       this.tearingDown.delete(user1Id);
       this.tearingDown.delete(user2Id);
-      this.logger.log(`[endMatch] users ${user1Id}, ${user2Id} are now queue-eligible`);
+      this.logger.debug(`[endMatch] ${user1Id}, ${user2Id} queue-eligible`);
     } else {
       // No in-memory match — check DB
       const dbMatch = await this.prisma.match.findUnique({ where: { id: matchId } }).catch(() => null);
@@ -483,7 +500,6 @@ export class MatchmakingService {
       .updateMany({ where: { matchId }, data: { endedAt: new Date(), endReason: reason } })
       .catch(() => {});
 
-    this.logger.log(`[endMatch] COMPLETE matchId=${matchId}`);
   }
 
   // ─── handleUserDisconnect ─────────────────────────────────────────────
@@ -497,11 +513,18 @@ export class MatchmakingService {
     // Cancel any existing timer for this user (in case of rapid disconnect/reconnect)
     this.cancelDisconnect(userId);
 
-    this.logger.log(`[disconnect] userId=${userId} — starting ${DISCONNECT_GRACE_MS}ms grace period`);
+    this.logger.debug(`[disconnect] userId=${userId} grace=${DISCONNECT_GRACE_MS}ms`);
 
     const timer = setTimeout(async () => {
       this.disconnectTimers.delete(userId);
-      this.logger.log(`[disconnect] grace period expired for userId=${userId} — cleaning up`);
+
+      // If user still has other live sockets, skip cleanup
+      if (this.hasActiveSockets(userId)) {
+        this.logger.debug(`[disconnect] userId=${userId} still has live sockets — skipping cleanup`);
+        return;
+      }
+
+      this.logger.log(`[disconnect] grace expired for userId=${userId} — cleaning up`);
 
       await this.leaveQueue(userId, redis);
 
@@ -518,14 +541,11 @@ export class MatchmakingService {
         cleanupPongGame(matchId);
         await this.endMatch(matchId, userId, 'partner_disconnected', redis, server);
       } else {
-        // No match but clean up any stale Redis refs
-        this.logger.log(`[disconnect] no active match for userId=${userId} — cleaning stale refs`);
+        this.logger.debug(`[disconnect] no active match for userId=${userId}`);
       }
 
-      // Belt & suspenders: clean all stale state for this user
       await this.forceCleanupUser(userId, redis);
 
-      // Remove from active presence and broadcast updated count
       this.removeActiveUser(userId);
       this.broadcastPresence(server, redis);
     }, DISCONNECT_GRACE_MS);
@@ -542,7 +562,7 @@ export class MatchmakingService {
     if (timer) {
       clearTimeout(timer);
       this.disconnectTimers.delete(userId);
-      this.logger.log(`[reconnect] cancelled disconnect cleanup for userId=${userId} — kept active user alive`);
+      this.logger.debug(`[reconnect] cancelled cleanup for userId=${userId}`);
     }
   }
 
@@ -569,7 +589,7 @@ export class MatchmakingService {
       partnerId,
     });
 
-    this.logger.log(`[resendMatch] resent match_found to userId=${userId} matchId=${matchId}`);
+    this.logger.debug(`[resendMatch] userId=${userId} matchId=${matchId}`);
     return true;
   }
 
@@ -588,7 +608,7 @@ export class MatchmakingService {
     redis: Redis,
     server?: any,
   ): Promise<{ status: string }> {
-    this.logger.log(`[resetQueue] userId=${userId} — force-cleaning all state`);
+    this.logger.log(`[resetQueue] userId=${userId}`);
 
     // Cancel any pending disconnect timer
     this.cancelDisconnect(userId);
@@ -598,7 +618,7 @@ export class MatchmakingService {
 
     // Now join queue fresh
     const result = await this.joinQueue(userId, data, redis, server);
-    this.logger.log(`[resetQueue] complete for userId=${userId} result=${result.status}`);
+    this.logger.debug(`[resetQueue] complete for userId=${userId} result=${result.status}`);
     return result;
   }
 }

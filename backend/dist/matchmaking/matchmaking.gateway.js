@@ -59,7 +59,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
             client.data.userId = payload.sub;
             client.join(`user:${payload.sub}`);
             this.matchmakingService.cancelDisconnect(payload.sub);
-            this.matchmakingService.addActiveUser(payload.sub);
+            this.matchmakingService.addActiveUser(payload.sub, client.id);
             this.matchmakingService.broadcastPresence(this.server, this.redis);
             const active = this.matchmakingService.getActiveUserCount();
             this.redis.zcard('matchmaking:queue').then((searching) => {
@@ -68,7 +68,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
                 client.emit('presence:update', { active, searching: 0 });
             });
             await this.matchmakingService.resendMatchIfExists(payload.sub, this.server);
-            this.logger.log(`[connect] userId=${payload.sub} socketId=${client.id} transport=${client.conn.transport.name}`);
+            this.logger.log(`[ws] connect userId=${payload.sub} socket=${client.id}`);
         }
         catch (err) {
             this.logger.warn(`[connect] auth failed: ${err.message} — disconnecting ${client.id}`);
@@ -78,14 +78,16 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
     async handleDisconnect(client) {
         if (!client.data.userId)
             return;
-        this.logger.log(`[disconnect] userId=${client.data.userId} socketId=${client.id}`);
-        await this.matchmakingService.handleUserDisconnect(client.data.userId, this.redis, this.server);
+        const userId = client.data.userId;
+        this.matchmakingService.removeActiveSocket(userId, client.id);
+        this.logger.debug(`[ws] disconnect userId=${userId} socket=${client.id}`);
+        await this.matchmakingService.handleUserDisconnect(userId, this.redis, this.server);
     }
     async joinQueue(client, data) {
         const userId = client.data.userId;
         if (!userId)
             return;
-        this.logger.log(`[join_queue] userId=${userId}`);
+        this.logger.debug(`[join_queue] userId=${userId}`);
         try {
             const result = await this.matchmakingService.joinQueue(userId, data, this.redis, this.server);
             if (result.status === 'queued') {
@@ -101,7 +103,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
     async leaveQueue(client) {
         if (!client.data.userId)
             return;
-        this.logger.log(`[leave_queue] userId=${client.data.userId}`);
+        this.logger.debug(`[leave_queue] userId=${client.data.userId}`);
         await this.matchmakingService.leaveQueue(client.data.userId, this.redis);
         client.emit('queue_status', { status: 'left' });
         this.matchmakingService.broadcastPresence(this.server, this.redis);
@@ -109,7 +111,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
     async endMatch(client, data) {
         if (!client.data.userId)
             return;
-        this.logger.log(`[end_match] userId=${client.data.userId} matchId=${data.matchId}`);
+        this.logger.debug(`[end_match] userId=${client.data.userId} matchId=${data.matchId}`);
         (0, memory_game_1.cleanupMemoryGame)(data.matchId);
         (0, tictactoe_game_1.cleanupTicTacToe)(data.matchId);
         (0, rope_game_1.cleanupRopeGame)(data.matchId);
@@ -120,7 +122,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
         const userId = client.data.userId;
         if (!userId)
             return;
-        this.logger.log(`[next_match] userId=${userId} matchId=${data.matchId}`);
+        this.logger.debug(`[next_match] userId=${userId} matchId=${data.matchId}`);
         if (data.matchId) {
             (0, memory_game_1.cleanupMemoryGame)(data.matchId);
             (0, tictactoe_game_1.cleanupTicTacToe)(data.matchId);
@@ -152,10 +154,6 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
             const result = await this.matchmakingService.resetQueue(userId, { lat: data?.lat, lng: data?.lng, preferences: data?.preferences || {} }, this.redis, this.server);
             if (result.status === 'queued') {
                 client.emit('queue_status', { status: 'queued' });
-                this.logger.log(`[reset_queue] userId=${userId} re-queued successfully`);
-            }
-            else if (result.status === 'matched') {
-                this.logger.log(`[reset_queue] userId=${userId} got instant match on reset`);
             }
         }
         catch (err) {
@@ -167,7 +165,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
         const userId = client.data.userId;
         if (!userId || !data.matchId || !data.partnerId)
             return;
-        this.logger.log(`[memory:start] userId=${userId} matchId=${data.matchId}`);
+        this.logger.debug(`[memory:start] userId=${userId} matchId=${data.matchId}`);
         (0, memory_game_1.startMemoryGame)(data.matchId, userId, data.partnerId, this.server);
     }
     handleMemoryFlip(client, data) {
@@ -180,7 +178,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
         const userId = client.data.userId;
         if (!userId || !data.matchId || !data.partnerId)
             return;
-        this.logger.log(`[ttt:start] userId=${userId} matchId=${data.matchId}`);
+        this.logger.debug(`[ttt:start] userId=${userId} matchId=${data.matchId}`);
         (0, tictactoe_game_1.startTicTacToe)(data.matchId, userId, data.partnerId, this.server);
     }
     handleTttMove(client, data) {
@@ -193,7 +191,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
         const userId = client.data.userId;
         if (!userId || !data.matchId || !data.partnerId)
             return;
-        this.logger.log(`[rope:start] userId=${userId} matchId=${data.matchId}`);
+        this.logger.debug(`[rope:start] userId=${userId} matchId=${data.matchId}`);
         (0, rope_game_1.startRopeGame)(data.matchId, userId, data.partnerId, this.server);
     }
     onRopePull(client, data) {
@@ -206,7 +204,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
         const userId = client.data.userId;
         if (!userId || !data.matchId || !data.partnerId)
             return;
-        this.logger.log(`[pong:start] userId=${userId} matchId=${data.matchId}`);
+        this.logger.debug(`[pong:start] userId=${userId} matchId=${data.matchId}`);
         (0, pong_game_1.startPongGame)(data.matchId, userId, data.partnerId, this.server);
     }
     onPongInput(client, data) {
@@ -220,7 +218,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
         const userId = client.data.userId;
         if (!userId || !data.matchId || !data.partnerId || !data.gameId)
             return;
-        this.logger.log(`[game:invite] ${userId} → ${data.partnerId} game=${data.gameId} match=${data.matchId}`);
+        this.logger.debug(`[game:invite] ${userId} → ${data.partnerId} game=${data.gameId}`);
         this.server.to(`user:${data.partnerId}`).emit('game:invite', {
             matchId: data.matchId,
             fromUserId: userId,
@@ -232,7 +230,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
         const userId = client.data.userId;
         if (!userId || !data.matchId || !data.partnerId || !data.gameId)
             return;
-        this.logger.log(`[game:accept] ${userId} accepted ${data.gameId} match=${data.matchId}`);
+        this.logger.debug(`[game:accept] ${userId} accepted ${data.gameId}`);
         this.server.to(`user:${userId}`).to(`user:${data.partnerId}`).emit('game:accepted', {
             matchId: data.matchId,
             gameId: data.gameId,
@@ -261,7 +259,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
         const userId = client.data.userId;
         if (!userId || !data.matchId || !data.partnerId)
             return;
-        this.logger.log(`[game:decline] ${userId} declined ${data.gameId} match=${data.matchId}`);
+        this.logger.debug(`[game:decline] ${userId} declined ${data.gameId}`);
         this.server.to(`user:${data.partnerId}`).emit('game:declined', {
             matchId: data.matchId,
             gameId: data.gameId,

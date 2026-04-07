@@ -17,9 +17,11 @@ export declare class MatchmakingService {
     private readonly disconnectTimers;
     private readonly activeUsers;
     constructor(prisma: PrismaService, voiceService: VoiceService);
-    addActiveUser(userId: string): boolean;
+    addActiveUser(userId: string, socketId: string): boolean;
+    removeActiveSocket(userId: string, socketId: string): boolean;
     removeActiveUser(userId: string): boolean;
     getActiveUserCount(): number;
+    hasActiveSockets(userId: string): boolean;
     getSearchingCount(redis: Redis): Promise<number>;
     broadcastPresence(server: any, redis?: Redis): void;
     forceCleanupUser(userId: string, redis: Redis): Promise<void>;

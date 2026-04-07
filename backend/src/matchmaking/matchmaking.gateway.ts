@@ -75,11 +75,11 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       // Cancel any pending disconnect cleanup — user reconnected in time
       this.matchmakingService.cancelDisconnect(payload.sub);
 
-      // Track active user presence (idempotent — no double-count on reconnect)
-      this.matchmakingService.addActiveUser(payload.sub);
+      // Track active user presence by userId+socketId
+      this.matchmakingService.addActiveUser(payload.sub, client.id);
       this.matchmakingService.broadcastPresence(this.server, this.redis);
 
-      // Send current count directly to the connecting client
+      // Send current presence to the newly connected client
       const active = this.matchmakingService.getActiveUserCount();
       this.redis.zcard('matchmaking:queue').then((searching) => {
         client.emit('presence:update', { active, searching });
@@ -87,10 +87,9 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
         client.emit('presence:update', { active, searching: 0 });
       });
 
-      // If user was matched during a brief disconnect, resend the match_found event
       await this.matchmakingService.resendMatchIfExists(payload.sub, this.server);
 
-      this.logger.log(`[connect] userId=${payload.sub} socketId=${client.id} transport=${client.conn.transport.name}`);
+      this.logger.log(`[ws] connect userId=${payload.sub} socket=${client.id}`);
     } catch (err: any) {
       this.logger.warn(`[connect] auth failed: ${err.message} — disconnecting ${client.id}`);
       client.disconnect();
@@ -99,9 +98,12 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
 
   async handleDisconnect(client: Socket) {
     if (!client.data.userId) return;
-    this.logger.log(`[disconnect] userId=${client.data.userId} socketId=${client.id}`);
+    const userId = client.data.userId;
+    // Remove this specific socket from presence tracking
+    this.matchmakingService.removeActiveSocket(userId, client.id);
+    this.logger.debug(`[ws] disconnect userId=${userId} socket=${client.id}`);
     await this.matchmakingService.handleUserDisconnect(
-      client.data.userId,
+      userId,
       this.redis,
       this.server,
     );
@@ -112,7 +114,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     const userId = client.data.userId;
     if (!userId) return;
 
-    this.logger.log(`[join_queue] userId=${userId}`);
+    this.logger.debug(`[join_queue] userId=${userId}`);
 
     try {
       const result = await this.matchmakingService.joinQueue(userId, data, this.redis, this.server);
@@ -120,7 +122,6 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       if (result.status === 'queued') {
         client.emit('queue_status', { status: 'queued' });
       }
-      // Broadcast updated searching count
       this.matchmakingService.broadcastPresence(this.server, this.redis);
     } catch (err: any) {
       this.logger.error(`[join_queue] error for userId=${userId}: ${err.message}`);
@@ -131,10 +132,9 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   @SubscribeMessage('leave_queue')
   async leaveQueue(@ConnectedSocket() client: Socket) {
     if (!client.data.userId) return;
-    this.logger.log(`[leave_queue] userId=${client.data.userId}`);
+    this.logger.debug(`[leave_queue] userId=${client.data.userId}`);
     await this.matchmakingService.leaveQueue(client.data.userId, this.redis);
     client.emit('queue_status', { status: 'left' });
-    // Broadcast updated searching count
     this.matchmakingService.broadcastPresence(this.server, this.redis);
   }
 
@@ -144,7 +144,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     @MessageBody() data: { matchId: string; reason: string },
   ) {
     if (!client.data.userId) return;
-    this.logger.log(`[end_match] userId=${client.data.userId} matchId=${data.matchId}`);
+    this.logger.debug(`[end_match] userId=${client.data.userId} matchId=${data.matchId}`);
     cleanupMemoryGame(data.matchId);
     cleanupTicTacToe(data.matchId);
     cleanupRopeGame(data.matchId);
@@ -166,7 +166,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     const userId = client.data.userId;
     if (!userId) return;
 
-    this.logger.log(`[next_match] userId=${userId} matchId=${data.matchId}`);
+    this.logger.debug(`[next_match] userId=${userId} matchId=${data.matchId}`);
 
     // Step 1: Full teardown of current match BEFORE re-queuing
     if (data.matchId) {
@@ -226,9 +226,6 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
 
       if (result.status === 'queued') {
         client.emit('queue_status', { status: 'queued' });
-        this.logger.log(`[reset_queue] userId=${userId} re-queued successfully`);
-      } else if (result.status === 'matched') {
-        this.logger.log(`[reset_queue] userId=${userId} got instant match on reset`);
       }
     } catch (err: any) {
       this.logger.error(`[reset_queue] error for userId=${userId}: ${err.message}`);
@@ -243,7 +240,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   ) {
     const userId = client.data.userId;
     if (!userId || !data.matchId || !data.partnerId) return;
-    this.logger.log(`[memory:start] userId=${userId} matchId=${data.matchId}`);
+    this.logger.debug(`[memory:start] userId=${userId} matchId=${data.matchId}`);
     startMemoryGame(data.matchId, userId, data.partnerId, this.server);
   }
 
@@ -266,7 +263,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   ) {
     const userId = client.data.userId;
     if (!userId || !data.matchId || !data.partnerId) return;
-    this.logger.log(`[ttt:start] userId=${userId} matchId=${data.matchId}`);
+    this.logger.debug(`[ttt:start] userId=${userId} matchId=${data.matchId}`);
     startTicTacToe(data.matchId, userId, data.partnerId, this.server);
   }
 
@@ -289,7 +286,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   ) {
     const userId = client.data.userId;
     if (!userId || !data.matchId || !data.partnerId) return;
-    this.logger.log(`[rope:start] userId=${userId} matchId=${data.matchId}`);
+    this.logger.debug(`[rope:start] userId=${userId} matchId=${data.matchId}`);
     startRopeGame(data.matchId, userId, data.partnerId, this.server);
   }
 
@@ -312,7 +309,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   ) {
     const userId = client.data.userId;
     if (!userId || !data.matchId || !data.partnerId) return;
-    this.logger.log(`[pong:start] userId=${userId} matchId=${data.matchId}`);
+    this.logger.debug(`[pong:start] userId=${userId} matchId=${data.matchId}`);
     startPongGame(data.matchId, userId, data.partnerId, this.server);
   }
 
@@ -337,7 +334,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   ) {
     const userId = client.data.userId;
     if (!userId || !data.matchId || !data.partnerId || !data.gameId) return;
-    this.logger.log(`[game:invite] ${userId} → ${data.partnerId} game=${data.gameId} match=${data.matchId}`);
+    this.logger.debug(`[game:invite] ${userId} → ${data.partnerId} game=${data.gameId}`);
     this.server.to(`user:${data.partnerId}`).emit('game:invite', {
       matchId: data.matchId,
       fromUserId: userId,
@@ -353,7 +350,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   ) {
     const userId = client.data.userId;
     if (!userId || !data.matchId || !data.partnerId || !data.gameId) return;
-    this.logger.log(`[game:accept] ${userId} accepted ${data.gameId} match=${data.matchId}`);
+    this.logger.debug(`[game:accept] ${userId} accepted ${data.gameId}`);
     // Notify both players
     this.server.to(`user:${userId}`).to(`user:${data.partnerId}`).emit('game:accepted', {
       matchId: data.matchId,
@@ -368,7 +365,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     const userId = client.data.userId;
     if (!userId) return;
     this.logger.log(`[logout] userId=${userId}`);
-    // Immediate teardown — no grace period for intentional logout
+    // Immediate teardown — no grace period
     this.matchmakingService.cancelDisconnect(userId);
     const matchId = this.matchmakingService.getMatchIdForUser(userId);
     if (matchId) {
@@ -389,7 +386,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   ) {
     const userId = client.data.userId;
     if (!userId || !data.matchId || !data.partnerId) return;
-    this.logger.log(`[game:decline] ${userId} declined ${data.gameId} match=${data.matchId}`);
+    this.logger.debug(`[game:decline] ${userId} declined ${data.gameId}`);
     this.server.to(`user:${data.partnerId}`).emit('game:declined', {
       matchId: data.matchId,
       gameId: data.gameId,
