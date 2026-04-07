@@ -64,8 +64,15 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: () => {
+    // Notify server immediately so partner isn't left stranded
+    try {
+      const { connectSocket } = require('@/lib/socket');
+      const socket = connectSocket();
+      socket.emit('logout');
+    } catch {}
     localStorage.removeItem('kk_token');
     localStorage.removeItem('kk_user');
+    sessionStorage.removeItem('kk_match');
     set({ user: null, token: null });
     window.location.href = '/';
   },

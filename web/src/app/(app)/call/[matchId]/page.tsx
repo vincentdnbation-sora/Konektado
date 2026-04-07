@@ -53,12 +53,24 @@ const MIC_REQUEST_TIMEOUT_MS = 10000;
  * Inner component — must be rendered inside <LiveKitRoom>.
  * Handles mic capture, remote audio playback, and connection status display.
  */
-function CallRoom({ isMuted, onRetry, micApproved }: { isMuted: boolean; onRetry: () => void; micApproved: boolean }) {
+function CallRoom({ isMuted, onRetry, micApproved, onPartnerLeft }: { isMuted: boolean; onRetry: () => void; micApproved: boolean; onPartnerLeft?: () => void }) {
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
   const connectionState = useConnectionState();
   const partnerConnected = remoteParticipants.length > 0;
+
+  // Detect partner leaving the LiveKit room
+  const partnerWasConnected = useRef(false);
+  useEffect(() => {
+    if (partnerConnected) {
+      partnerWasConnected.current = true;
+    } else if (partnerWasConnected.current && connectionState === ConnectionState.Connected) {
+      // Partner was here and is now gone while we're still connected
+      console.log('[CallRoom] partner left the LiveKit room');
+      onPartnerLeft?.();
+    }
+  }, [partnerConnected, connectionState, onPartnerLeft]);
 
   // Track published audio tracks (local + remote) for debugging
   const audioTracks = useTracks([Track.Source.Microphone], { onlySubscribed: false });
@@ -424,6 +436,39 @@ export default function CallPage() {
     };
   }, [clearMatch, user?.id]);
 
+  // Detect partner leaving the LiveKit room — triggers match end immediately
+  const handlePartnerLeftRoom = useCallback(() => {
+    if (!isMounted.current || endCallCalled.current) return;
+    endCallCalled.current = true;
+    console.log('[CallPage] partner left LiveKit room — ending match');
+    connectSocket().emit('end_match', { matchId, reason: 'partner_left' });
+    toast('Your partner left', { description: 'Find someone new?' });
+    clearMatch();
+    setPostReason('partner_left');
+    setPhase('post');
+  }, [matchId, clearMatch]);
+
+  // Cleanup on unmount — if still in a call, end it so partner isn't stranded
+  useEffect(() => {
+    return () => {
+      if (!endCallCalled.current && matchId) {
+        console.log('[CallPage] unmount cleanup — emitting end_match');
+        connectSocket().emit('end_match', { matchId, reason: 'user_left' });
+      }
+    };
+  }, [matchId]);
+
+  // Cleanup on page close / tab close
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!endCallCalled.current && matchId) {
+        connectSocket().emit('end_match', { matchId, reason: 'user_left' });
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [matchId]);
+
   // Fix 5: endCallCalled ref ensures this runs at most once per call session.
   const handleEndCall = useCallback(
     (reason: string) => {
@@ -496,7 +541,7 @@ export default function CallPage() {
             Find Another Match
           </Button>
           <Button variant="outline" onClick={() => { clearMatch(); router.push('/home'); }}>
-            Go Home
+            Back to Menu
           </Button>
         </div>
       </div>
@@ -660,6 +705,7 @@ export default function CallPage() {
         <CallRoom
           isMuted={isMuted}
           micApproved={micApproved}
+          onPartnerLeft={handlePartnerLeftRoom}
           onRetry={() => {
             wasEverConnected.current = false;
             setConnectKey((k) => k + 1);

@@ -210,6 +210,23 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
             acceptedBy: userId,
         });
     }
+    async handleLogout(client) {
+        const userId = client.data.userId;
+        if (!userId)
+            return;
+        this.logger.log(`[logout] userId=${userId}`);
+        this.matchmakingService.cancelDisconnect(userId);
+        const matchId = this.matchmakingService.getMatchIdForUser(userId);
+        if (matchId) {
+            (0, memory_game_1.cleanupMemoryGame)(matchId);
+            (0, tictactoe_game_1.cleanupTicTacToe)(matchId);
+            (0, rope_game_1.cleanupRopeGame)(matchId);
+            (0, pong_game_1.cleanupPongGame)(matchId);
+            await this.matchmakingService.endMatch(matchId, userId, 'user_logged_out', this.redis, this.server);
+        }
+        await this.matchmakingService.leaveQueue(userId, this.redis);
+        client.disconnect();
+    }
     handleGameDecline(client, data) {
         const userId = client.data.userId;
         if (!userId || !data.matchId || !data.partnerId)
@@ -338,6 +355,13 @@ __decorate([
     __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
     __metadata("design:returntype", void 0)
 ], MatchmakingGateway.prototype, "handleGameAccept", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('logout'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket]),
+    __metadata("design:returntype", Promise)
+], MatchmakingGateway.prototype, "handleLogout", null);
 __decorate([
     (0, websockets_1.SubscribeMessage)('game:decline'),
     __param(0, (0, websockets_1.ConnectedSocket)()),

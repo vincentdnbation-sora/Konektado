@@ -67,6 +67,7 @@ export declare class MatchmakingGateway implements OnGatewayConnection, OnGatewa
         gameId: string;
         gameTitle: string;
     }): void;
+    handleLogout(client: Socket): Promise<void>;
     handleGameDecline(client: Socket, data: {
         matchId: string;
         partnerId: string;

@@ -317,6 +317,25 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
     });
   }
 
+  @SubscribeMessage('logout')
+  async handleLogout(@ConnectedSocket() client: Socket) {
+    const userId = client.data.userId;
+    if (!userId) return;
+    this.logger.log(`[logout] userId=${userId}`);
+    // Immediate teardown — no grace period for intentional logout
+    this.matchmakingService.cancelDisconnect(userId);
+    const matchId = this.matchmakingService.getMatchIdForUser(userId);
+    if (matchId) {
+      cleanupMemoryGame(matchId);
+      cleanupTicTacToe(matchId);
+      cleanupRopeGame(matchId);
+      cleanupPongGame(matchId);
+      await this.matchmakingService.endMatch(matchId, userId, 'user_logged_out', this.redis, this.server);
+    }
+    await this.matchmakingService.leaveQueue(userId, this.redis);
+    client.disconnect();
+  }
+
   @SubscribeMessage('game:decline')
   handleGameDecline(
     @ConnectedSocket() client: Socket,
