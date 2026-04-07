@@ -189,6 +189,12 @@ function finishGame(state: PongState, server: Server) {
 }
 
 export function startPongGame(matchId: string, player1: string, player2: string, server: Server) {
+  // Guard: if a game is already active for this match, ignore duplicate starts
+  const existing = games.get(matchId);
+  if (existing && existing.status === 'active') {
+    logger.warn(`[start] DUPLICATE start ignored for matchId=${matchId} (already active)`);
+    return;
+  }
   cleanupPongGame(matchId);
 
   const state: PongState = {
@@ -225,11 +231,25 @@ export function startPongGame(matchId: string, player1: string, player2: string,
   state.tickTimer = setInterval(() => gameTick(state, server), TICK_MS);
 }
 
-export function handlePongInput(matchId: string, userId: string, direction: 'up' | 'down' | 'stop', server: Server) {
+export function handlePongInput(matchId: string, userId: string, direction: 'up' | 'down' | 'stop' | number, server: Server) {
   const state = games.get(matchId);
   if (!state || state.status !== 'active') return;
 
-  // Map string direction to numeric: -1 = up, 0 = stop, 1 = down
+  // Support both legacy direction strings and absolute Y position (number)
+  if (typeof direction === 'number') {
+    // Absolute Y position from drag — clamp to valid range
+    const y = Math.max(PADDLE_H / 2, Math.min(FIELD_H - PADDLE_H / 2, direction));
+    if (userId === state.player1) {
+      state.paddle1Y = y;
+      state.p1Input = 0; // clear directional input
+    } else if (userId === state.player2) {
+      state.paddle2Y = y;
+      state.p2Input = 0;
+    }
+    return;
+  }
+
+  // Legacy directional input
   const dirMap: Record<string, number> = { up: -1, stop: 0, down: 1 };
   const clamped = dirMap[direction] ?? 0;
 

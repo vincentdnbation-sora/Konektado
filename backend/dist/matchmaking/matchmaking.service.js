@@ -25,6 +25,7 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
     logger = new common_1.Logger(MatchmakingService_1.name);
     activeMatches = new Map();
     userToMatch = new Map();
+    tearingDown = new Set();
     disconnectTimers = new Map();
     constructor(prisma, voiceService) {
         this.prisma = prisma;
@@ -33,15 +34,23 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
     async joinQueue(userId, data, redis, server) {
         this.logger.log(`[joinQueue] userId=${userId}`);
         const existingMatchId = this.userToMatch.get(userId);
-        if (existingMatchId && this.activeMatches.has(existingMatchId) && server) {
-            this.logger.log(`[joinQueue] user ${userId} already matched (${existingMatchId}) — resending`);
-            await this.resendMatchIfExists(userId, server);
+        if (existingMatchId && this.activeMatches.has(existingMatchId)) {
+            this.logger.warn(`[joinQueue] REJECTED — user ${userId} has active match ${existingMatchId}`);
+            if (server) {
+                await this.resendMatchIfExists(userId, server);
+            }
             return { status: 'matched' };
         }
-        await Promise.all([
-            redis.srem(MATCHED_SET, userId),
-            redis.zrem(QUEUE_KEY, userId),
-        ]);
+        if (this.tearingDown.has(userId)) {
+            this.logger.warn(`[joinQueue] REJECTED — user ${userId} teardown in progress`);
+            return { status: 'error' };
+        }
+        const alreadyInQueue = await redis.zscore(QUEUE_KEY, userId);
+        if (alreadyInQueue !== null) {
+            this.logger.warn(`[joinQueue] DUPLICATE — user ${userId} already in queue, ignoring`);
+            return { status: 'queued' };
+        }
+        await redis.srem(MATCHED_SET, userId);
         const hasLocation = data.lat != null && data.lng != null;
         await Promise.all([
             redis.hset(`${USER_DATA_PREFIX}${userId}`, {
@@ -178,26 +187,40 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
         await this.prisma.session.create({ data: { matchId } });
     }
     async endMatch(matchId, userId, reason, redis, server) {
-        this.logger.log(`[endMatch] matchId=${matchId} userId=${userId} reason=${reason}`);
+        this.logger.log(`[endMatch] START matchId=${matchId} userId=${userId} reason=${reason}`);
         const match = this.activeMatches.get(matchId);
         if (match) {
+            this.tearingDown.add(match.user1Id);
+            this.tearingDown.add(match.user2Id);
             this.activeMatches.delete(matchId);
             this.userToMatch.delete(match.user1Id);
             this.userToMatch.delete(match.user2Id);
             await redis.srem(MATCHED_SET, match.user1Id, match.user2Id);
             if (server) {
                 const partnerId = match.user1Id === userId ? match.user2Id : match.user1Id;
+                const endPayload = { matchId, reason, endedBy: userId };
+                server.to(`user:${userId}`).to(`user:${partnerId}`).emit('match_ended', endPayload);
                 server.to(`user:${partnerId}`).emit('partner_disconnected', { reason });
             }
+            this.tearingDown.delete(match.user1Id);
+            this.tearingDown.delete(match.user2Id);
         }
         else {
             const dbMatch = await this.prisma.match.findUnique({ where: { id: matchId } });
             if (dbMatch) {
+                this.tearingDown.add(dbMatch.user1Id);
+                this.tearingDown.add(dbMatch.user2Id);
+                this.userToMatch.delete(dbMatch.user1Id);
+                this.userToMatch.delete(dbMatch.user2Id);
                 await redis.srem(MATCHED_SET, dbMatch.user1Id, dbMatch.user2Id);
                 if (server) {
                     const partnerId = dbMatch.user1Id === userId ? dbMatch.user2Id : dbMatch.user1Id;
+                    const endPayload = { matchId, reason, endedBy: userId };
+                    server.to(`user:${userId}`).to(`user:${partnerId}`).emit('match_ended', endPayload);
                     server.to(`user:${partnerId}`).emit('partner_disconnected', { reason });
                 }
+                this.tearingDown.delete(dbMatch.user1Id);
+                this.tearingDown.delete(dbMatch.user2Id);
             }
         }
         this.prisma.match
@@ -206,6 +229,7 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
         this.prisma.session
             .updateMany({ where: { matchId }, data: { endedAt: new Date(), endReason: reason } })
             .catch(() => { });
+        this.logger.log(`[endMatch] COMPLETE matchId=${matchId}`);
     }
     handleUserDisconnect(userId, redis, server) {
         this.cancelDisconnect(userId);
@@ -216,6 +240,14 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
             await this.leaveQueue(userId, redis);
             const matchId = this.userToMatch.get(userId);
             if (matchId) {
+                const { cleanupMemoryGame } = require('./memory-game');
+                const { cleanupTicTacToe } = require('./tictactoe-game');
+                const { cleanupRopeGame } = require('./rope-game');
+                const { cleanupPongGame } = require('./pong-game');
+                cleanupMemoryGame(matchId);
+                cleanupTicTacToe(matchId);
+                cleanupRopeGame(matchId);
+                cleanupPongGame(matchId);
                 await this.endMatch(matchId, userId, 'partner_disconnected', redis, server);
             }
             await redis.srem(MATCHED_SET, userId);

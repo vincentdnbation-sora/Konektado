@@ -370,7 +370,20 @@ export default function CallPage() {
     const onPartnerDisconnected = () => {
       if (!isMounted.current || endCallCalled.current) return;
       endCallCalled.current = true;
+      console.log('[CallPage] partner_disconnected received');
       toast('Your partner left the call', { description: 'Find someone new?' });
+      clearMatch();
+      setPostReason('partner_left');
+      setPhase('post');
+    };
+
+    const onMatchEnded = (data: { matchId: string; reason: string; endedBy: string }) => {
+      if (!isMounted.current || endCallCalled.current) return;
+      console.log('[CallPage] match_ended received', data);
+      // If WE ended it, the handleEndCall path already handled state. Skip.
+      if (data.endedBy === user?.id) return;
+      endCallCalled.current = true;
+      toast('Match ended', { description: 'Your partner left the call' });
       clearMatch();
       setPostReason('partner_left');
       setPhase('post');
@@ -397,17 +410,19 @@ export default function CallPage() {
     };
 
     socket.on('partner_disconnected', onPartnerDisconnected);
+    socket.on('match_ended', onMatchEnded);
     socket.on('game:invite', onGameInvite);
     socket.on('game:accepted', onGameAccepted);
     socket.on('game:declined', onGameDeclined);
 
     return () => {
       socket.off('partner_disconnected', onPartnerDisconnected);
+      socket.off('match_ended', onMatchEnded);
       socket.off('game:invite', onGameInvite);
       socket.off('game:accepted', onGameAccepted);
       socket.off('game:declined', onGameDeclined);
     };
-  }, [clearMatch]);
+  }, [clearMatch, user?.id]);
 
   // Fix 5: endCallCalled ref ensures this runs at most once per call session.
   const handleEndCall = useCallback(

@@ -20,5 +20,5 @@ export interface PongState {
     pauseUntil: number;
 }
 export declare function startPongGame(matchId: string, player1: string, player2: string, server: Server): void;
-export declare function handlePongInput(matchId: string, userId: string, direction: 'up' | 'down' | 'stop', server: Server): void;
+export declare function handlePongInput(matchId: string, userId: string, direction: 'up' | 'down' | 'stop' | number, server: Server): void;
 export declare function cleanupPongGame(matchId: string): void;

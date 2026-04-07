@@ -13,6 +13,7 @@ export declare class MatchmakingService {
     private readonly logger;
     readonly activeMatches: Map<string, ActiveMatch>;
     private readonly userToMatch;
+    private readonly tearingDown;
     private readonly disconnectTimers;
     constructor(prisma: PrismaService, voiceService: VoiceService);
     joinQueue(userId: string, data: {

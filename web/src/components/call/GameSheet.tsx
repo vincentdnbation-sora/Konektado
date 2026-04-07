@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { connectSocket } from '@/lib/socket';
 import { toast } from 'sonner';
 
+// ── Beta override — set NEXT_PUBLIC_BETA_PREMIUM=true to unlock premium games ──
+const BETA_PREMIUM = process.env.NEXT_PUBLIC_BETA_PREMIUM === 'true';
+
 // ── Game catalog ──
 
 export interface GameDef {
@@ -22,6 +25,11 @@ export const GAME_CATALOG: GameDef[] = [
   { id: 'chess',     title: 'Chess',            description: 'The ultimate strategy game — think ahead!',            icon: '♟️', premium: true },
   { id: 'billiards', title: 'Billiards',        description: 'Pocket all your balls before your opponent',           icon: '🎱', premium: true },
 ];
+
+/** Returns true if the game is effectively locked (premium + beta mode off) */
+export function isGameLocked(game: GameDef): boolean {
+  return game.premium && !BETA_PREMIUM;
+}
 
 // ── Invite status types ──
 
@@ -58,8 +66,13 @@ export function GameSheet({
   const [dragY, setDragY] = useState(0);
   const dragStart = useRef<number | null>(null);
 
-  const freeGames = GAME_CATALOG.filter((g) => !g.premium);
-  const premiumGames = GAME_CATALOG.filter((g) => g.premium);
+  // In beta mode, premium games appear in the free section as playable
+  const freeGames = BETA_PREMIUM
+    ? GAME_CATALOG  // all games are playable in beta
+    : GAME_CATALOG.filter((g) => !g.premium);
+  const premiumGames = BETA_PREMIUM
+    ? []            // no locked section in beta
+    : GAME_CATALOG.filter((g) => g.premium);
 
   // Close on backdrop tap
   const handleBackdropClick = useCallback(
@@ -87,7 +100,7 @@ export function GameSheet({
   }, [dragY, onClose]);
 
   function handleSelectGame(game: GameDef) {
-    if (game.premium) {
+    if (isGameLocked(game)) {
       toast('Upgrade required', { description: `"${game.title}" is a premium game. Coming soon!` });
       return;
     }

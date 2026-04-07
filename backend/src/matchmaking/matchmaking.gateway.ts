@@ -152,6 +152,7 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
 
     this.logger.log(`[next_match] userId=${userId} matchId=${data.matchId}`);
 
+    // Step 1: Full teardown of current match BEFORE re-queuing
     if (data.matchId) {
       cleanupMemoryGame(data.matchId);
       cleanupTicTacToe(data.matchId);
@@ -166,6 +167,10 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       );
     }
 
+    // Step 2: Small delay to ensure teardown events are processed
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Step 3: Now re-queue
     try {
       const result = await this.matchmakingService.joinQueue(
         userId,
@@ -176,6 +181,8 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
 
       if (result.status === 'queued') {
         client.emit('queue_status', { status: 'queued' });
+      } else if (result.status === 'error') {
+        client.emit('queue_status', { status: 'error', message: 'Teardown in progress, try again' });
       }
     } catch (err: any) {
       this.logger.error(`[next_match] error for userId=${userId}: ${err.message}`);
@@ -266,11 +273,13 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
   @SubscribeMessage('pong:input')
   onPongInput(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { matchId: string; direction: 'up' | 'down' | 'stop' },
+    @MessageBody() data: { matchId: string; direction?: 'up' | 'down' | 'stop'; y?: number },
   ) {
     const userId = client.data.userId;
-    if (!userId || !data.matchId || !data.direction) return;
-    handlePongInput(data.matchId, userId, data.direction, this.server);
+    if (!userId || !data.matchId) return;
+    // Support absolute Y position (drag) or directional input (legacy)
+    const input = data.y !== undefined ? data.y : (data.direction ?? 'stop');
+    handlePongInput(data.matchId, userId, input as any, this.server);
   }
 
   // ── Game invitation system ──

@@ -52,7 +52,8 @@ export declare class MatchmakingGateway implements OnGatewayConnection, OnGatewa
     }): void;
     onPongInput(client: Socket, data: {
         matchId: string;
-        direction: 'up' | 'down' | 'stop';
+        direction?: 'up' | 'down' | 'stop';
+        y?: number;
     }): void;
     handleGameInvite(client: Socket, data: {
         matchId: string;

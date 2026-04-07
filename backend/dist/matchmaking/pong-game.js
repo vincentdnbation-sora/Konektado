@@ -139,6 +139,11 @@ function finishGame(state, server) {
     games.delete(state.matchId);
 }
 function startPongGame(matchId, player1, player2, server) {
+    const existing = games.get(matchId);
+    if (existing && existing.status === 'active') {
+        logger.warn(`[start] DUPLICATE start ignored for matchId=${matchId} (already active)`);
+        return;
+    }
     cleanupPongGame(matchId);
     const state = {
         matchId,
@@ -174,6 +179,18 @@ function handlePongInput(matchId, userId, direction, server) {
     const state = games.get(matchId);
     if (!state || state.status !== 'active')
         return;
+    if (typeof direction === 'number') {
+        const y = Math.max(PADDLE_H / 2, Math.min(FIELD_H - PADDLE_H / 2, direction));
+        if (userId === state.player1) {
+            state.paddle1Y = y;
+            state.p1Input = 0;
+        }
+        else if (userId === state.player2) {
+            state.paddle2Y = y;
+            state.p2Input = 0;
+        }
+        return;
+    }
     const dirMap = { up: -1, stop: 0, down: 1 };
     const clamped = dirMap[direction] ?? 0;
     if (userId === state.player1) {

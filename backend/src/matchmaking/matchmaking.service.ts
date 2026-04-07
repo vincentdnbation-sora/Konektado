@@ -25,6 +25,9 @@ export class MatchmakingService {
   readonly activeMatches = new Map<string, ActiveMatch>();
   private readonly userToMatch = new Map<string, string>();
 
+  /** Users currently being torn down — prevents re-queue during teardown */
+  private readonly tearingDown = new Set<string>();
+
   /** Pending disconnect timers — cancelled if user reconnects within grace period */
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
 
@@ -42,19 +45,31 @@ export class MatchmakingService {
   ): Promise<{ status: string }> {
     this.logger.log(`[joinQueue] userId=${userId}`);
 
-    // If user already has an active match (e.g. matched during brief disconnect), resend it
+    // ── GUARD: reject if user has an active match ──
     const existingMatchId = this.userToMatch.get(userId);
-    if (existingMatchId && this.activeMatches.has(existingMatchId) && server) {
-      this.logger.log(`[joinQueue] user ${userId} already matched (${existingMatchId}) — resending`);
-      await this.resendMatchIfExists(userId, server);
+    if (existingMatchId && this.activeMatches.has(existingMatchId)) {
+      this.logger.warn(`[joinQueue] REJECTED — user ${userId} has active match ${existingMatchId}`);
+      if (server) {
+        await this.resendMatchIfExists(userId, server);
+      }
       return { status: 'matched' };
     }
 
-    // Remove stale state — user may be rejoining after ending a call
-    await Promise.all([
-      redis.srem(MATCHED_SET, userId),
-      redis.zrem(QUEUE_KEY, userId),
-    ]);
+    // ── GUARD: reject if user is in the middle of a teardown ──
+    if (this.tearingDown.has(userId)) {
+      this.logger.warn(`[joinQueue] REJECTED — user ${userId} teardown in progress`);
+      return { status: 'error' };
+    }
+
+    // ── GUARD: reject duplicate queue entry ──
+    const alreadyInQueue = await redis.zscore(QUEUE_KEY, userId);
+    if (alreadyInQueue !== null) {
+      this.logger.warn(`[joinQueue] DUPLICATE — user ${userId} already in queue, ignoring`);
+      return { status: 'queued' };
+    }
+
+    // Clean up stale Redis state (belt & suspenders)
+    await redis.srem(MATCHED_SET, userId);
 
     // Store user metadata in Redis for the sweep matcher
     const hasLocation = data.lat != null && data.lng != null;
@@ -236,11 +251,15 @@ export class MatchmakingService {
 
   // ─── endMatch ─────────────────────────────────────────────────────────
   async endMatch(matchId: string, userId: string, reason: string, redis: Redis, server?: any) {
-    this.logger.log(`[endMatch] matchId=${matchId} userId=${userId} reason=${reason}`);
+    this.logger.log(`[endMatch] START matchId=${matchId} userId=${userId} reason=${reason}`);
 
     const match = this.activeMatches.get(matchId);
 
     if (match) {
+      // Mark both users as tearing down to prevent re-queue race
+      this.tearingDown.add(match.user1Id);
+      this.tearingDown.add(match.user2Id);
+
       this.activeMatches.delete(matchId);
       this.userToMatch.delete(match.user1Id);
       this.userToMatch.delete(match.user2Id);
@@ -248,16 +267,32 @@ export class MatchmakingService {
 
       if (server) {
         const partnerId = match.user1Id === userId ? match.user2Id : match.user1Id;
+        // Emit match_ended to BOTH users so both transition to post-match
+        const endPayload = { matchId, reason, endedBy: userId };
+        server.to(`user:${userId}`).to(`user:${partnerId}`).emit('match_ended', endPayload);
+        // Also emit legacy partner_disconnected for backward compat
         server.to(`user:${partnerId}`).emit('partner_disconnected', { reason });
       }
+
+      // Release teardown lock
+      this.tearingDown.delete(match.user1Id);
+      this.tearingDown.delete(match.user2Id);
     } else {
       const dbMatch = await this.prisma.match.findUnique({ where: { id: matchId } });
       if (dbMatch) {
+        this.tearingDown.add(dbMatch.user1Id);
+        this.tearingDown.add(dbMatch.user2Id);
+        this.userToMatch.delete(dbMatch.user1Id);
+        this.userToMatch.delete(dbMatch.user2Id);
         await redis.srem(MATCHED_SET, dbMatch.user1Id, dbMatch.user2Id);
         if (server) {
           const partnerId = dbMatch.user1Id === userId ? dbMatch.user2Id : dbMatch.user1Id;
+          const endPayload = { matchId, reason, endedBy: userId };
+          server.to(`user:${userId}`).to(`user:${partnerId}`).emit('match_ended', endPayload);
           server.to(`user:${partnerId}`).emit('partner_disconnected', { reason });
         }
+        this.tearingDown.delete(dbMatch.user1Id);
+        this.tearingDown.delete(dbMatch.user2Id);
       }
     }
 
@@ -267,6 +302,8 @@ export class MatchmakingService {
     this.prisma.session
       .updateMany({ where: { matchId }, data: { endedAt: new Date(), endReason: reason } })
       .catch(() => {});
+
+    this.logger.log(`[endMatch] COMPLETE matchId=${matchId}`);
   }
 
   // ─── handleUserDisconnect ─────────────────────────────────────────────
@@ -290,6 +327,15 @@ export class MatchmakingService {
 
       const matchId = this.userToMatch.get(userId);
       if (matchId) {
+        // Clean up all game states for this match
+        const { cleanupMemoryGame } = require('./memory-game');
+        const { cleanupTicTacToe } = require('./tictactoe-game');
+        const { cleanupRopeGame } = require('./rope-game');
+        const { cleanupPongGame } = require('./pong-game');
+        cleanupMemoryGame(matchId);
+        cleanupTicTacToe(matchId);
+        cleanupRopeGame(matchId);
+        cleanupPongGame(matchId);
         await this.endMatch(matchId, userId, 'partner_disconnected', redis, server);
       }
 

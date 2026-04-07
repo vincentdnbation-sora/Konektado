@@ -118,10 +118,14 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
             (0, pong_game_1.cleanupPongGame)(data.matchId);
             await this.matchmakingService.endMatch(data.matchId, userId, 'user_skipped', this.redis, this.server);
         }
+        await new Promise((resolve) => setTimeout(resolve, 100));
         try {
             const result = await this.matchmakingService.joinQueue(userId, { lat: data.lat, lng: data.lng, preferences: data.preferences || {} }, this.redis, this.server);
             if (result.status === 'queued') {
                 client.emit('queue_status', { status: 'queued' });
+            }
+            else if (result.status === 'error') {
+                client.emit('queue_status', { status: 'error', message: 'Teardown in progress, try again' });
             }
         }
         catch (err) {
@@ -177,9 +181,10 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
     }
     onPongInput(client, data) {
         const userId = client.data.userId;
-        if (!userId || !data.matchId || !data.direction)
+        if (!userId || !data.matchId)
             return;
-        (0, pong_game_1.handlePongInput)(data.matchId, userId, data.direction, this.server);
+        const input = data.y !== undefined ? data.y : (data.direction ?? 'stop');
+        (0, pong_game_1.handlePongInput)(data.matchId, userId, input, this.server);
     }
     handleGameInvite(client, data) {
         const userId = client.data.userId;
