@@ -118,7 +118,7 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
             (0, pong_game_1.cleanupPongGame)(data.matchId);
             await this.matchmakingService.endMatch(data.matchId, userId, 'user_skipped', this.redis, this.server);
         }
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await this.matchmakingService.forceCleanupUser(userId, this.redis);
         try {
             const result = await this.matchmakingService.joinQueue(userId, { lat: data.lat, lng: data.lng, preferences: data.preferences || {} }, this.redis, this.server);
             if (result.status === 'queued') {
@@ -130,6 +130,26 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
         }
         catch (err) {
             this.logger.error(`[next_match] error for userId=${userId}: ${err.message}`);
+            client.emit('queue_status', { status: 'error', message: err.message });
+        }
+    }
+    async resetQueue(client, data) {
+        const userId = client.data.userId;
+        if (!userId)
+            return;
+        this.logger.log(`[reset_queue] userId=${userId}`);
+        try {
+            const result = await this.matchmakingService.resetQueue(userId, { lat: data?.lat, lng: data?.lng, preferences: data?.preferences || {} }, this.redis, this.server);
+            if (result.status === 'queued') {
+                client.emit('queue_status', { status: 'queued' });
+                this.logger.log(`[reset_queue] userId=${userId} re-queued successfully`);
+            }
+            else if (result.status === 'matched') {
+                this.logger.log(`[reset_queue] userId=${userId} got instant match on reset`);
+            }
+        }
+        catch (err) {
+            this.logger.error(`[reset_queue] error for userId=${userId}: ${err.message}`);
             client.emit('queue_status', { status: 'error', message: err.message });
         }
     }
@@ -275,6 +295,14 @@ __decorate([
     __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
     __metadata("design:returntype", Promise)
 ], MatchmakingGateway.prototype, "nextMatch", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('reset_queue'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
+    __metadata("design:returntype", Promise)
+], MatchmakingGateway.prototype, "resetQueue", null);
 __decorate([
     (0, websockets_1.SubscribeMessage)('memory:start'),
     __param(0, (0, websockets_1.ConnectedSocket)()),

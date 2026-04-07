@@ -385,6 +385,8 @@ export default function CallPage() {
       console.log('[CallPage] partner_disconnected received');
       toast('Your partner left the call', { description: 'Find someone new?' });
       clearMatch();
+      setActiveGame(null);
+      setInviteStatus({ type: 'idle' });
       setPostReason('partner_left');
       setPhase('post');
     };
@@ -397,6 +399,8 @@ export default function CallPage() {
       endCallCalled.current = true;
       toast('Match ended', { description: 'Your partner left the call' });
       clearMatch();
+      setActiveGame(null);
+      setInviteStatus({ type: 'idle' });
       setPostReason('partner_left');
       setPhase('post');
     };
@@ -444,6 +448,8 @@ export default function CallPage() {
     connectSocket().emit('end_match', { matchId, reason: 'partner_left' });
     toast('Your partner left', { description: 'Find someone new?' });
     clearMatch();
+    setActiveGame(null);
+    setInviteStatus({ type: 'idle' });
     setPostReason('partner_left');
     setPhase('post');
   }, [matchId, clearMatch]);
@@ -477,6 +483,8 @@ export default function CallPage() {
       console.log('[CallPage] ending call, reason:', reason, 'matchId:', matchId);
       connectSocket().emit('end_match', { matchId, reason });
       clearMatch();
+      setActiveGame(null);
+      setInviteStatus({ type: 'idle' });
       setPostReason(reason as PostReason);
       setPhase('post');
     },
@@ -492,11 +500,13 @@ export default function CallPage() {
     isMounted.current = false;
     endCallCalled.current = true;
 
+    // Clear game/invite state before navigating
+    setActiveGame(null);
+    setInviteStatus({ type: 'idle' });
+
     const socket = connectSocket();
     socket.emit('next_match', {
       matchId,
-      // Fix 3 (frontend side): include lat/lng so the server's joinQueue
-      // can store accurate location data for this user.
       lat: lastLocation?.lat,
       lng: lastLocation?.lng,
       preferences: user?.preferences || {},

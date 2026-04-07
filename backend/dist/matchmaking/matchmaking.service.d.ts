@@ -16,6 +16,7 @@ export declare class MatchmakingService {
     private readonly tearingDown;
     private readonly disconnectTimers;
     constructor(prisma: PrismaService, voiceService: VoiceService);
+    forceCleanupUser(userId: string, redis: Redis): Promise<void>;
     joinQueue(userId: string, data: {
         lat?: number;
         lng?: number;
@@ -27,6 +28,7 @@ export declare class MatchmakingService {
         status: string;
     }>;
     runMatchmaking(redis: Redis, server: any): Promise<void>;
+    private pruneStaleQueueEntries;
     private popAvailablePartner;
     createMatch(user1Id: string, user2Id: string, redis: Redis, server: any): Promise<void>;
     private persistMatch;
@@ -35,4 +37,11 @@ export declare class MatchmakingService {
     cancelDisconnect(userId: string): void;
     resendMatchIfExists(userId: string, server: any): Promise<boolean>;
     getMatchIdForUser(userId: string): string | undefined;
+    resetQueue(userId: string, data: {
+        lat?: number;
+        lng?: number;
+        preferences?: any;
+    }, redis: Redis, server?: any): Promise<{
+        status: string;
+    }>;
 }

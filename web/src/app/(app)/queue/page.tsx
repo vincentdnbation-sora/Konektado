@@ -1,26 +1,61 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMatchStore } from '@/store/matchStore';
 import { useAuthStore } from '@/store/authStore';
 import { connectSocket } from '@/lib/socket';
 import { Button } from '@/components/ui/button';
 
+const RESET_TIMEOUT_SECONDS = 20;
+
 export default function QueuePage() {
   const router = useRouter();
-  const { setMatch, setQueueStatus, queueStatus } = useMatchStore();
+  const { setMatch, setQueueStatus, queueStatus, clearMatch } = useMatchStore();
   const { user } = useAuthStore();
   const [seconds, setSeconds] = useState(0);
+  const [showReset, setShowReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const joinedRef = useRef(false);
+  const matchFoundRef = useRef(false);
+
+  // Show reset button after 20 seconds
+  useEffect(() => {
+    if (seconds >= RESET_TIMEOUT_SECONDS && !showReset && !matchFoundRef.current) {
+      setShowReset(true);
+    }
+  }, [seconds, showReset]);
+
+  const handleResetQueue = useCallback(() => {
+    console.log('[QueuePage] reset_queue requested');
+    setResetting(true);
+    setShowReset(false);
+
+    const socket = connectSocket();
+    socket.emit('reset_queue', {
+      lat: useMatchStore.getState().lastLocation?.lat,
+      lng: useMatchStore.getState().lastLocation?.lng,
+      preferences: user?.preferences || {},
+    });
+
+    // Reset timer
+    setSeconds(0);
+    setTimeout(() => setResetting(false), 1000);
+  }, [user]);
 
   // On mount: always (re-)emit join_queue to ensure server-side queue state
-  // This handles: first visit, page refresh, and socket reconnect
   useEffect(() => {
     const socket = connectSocket();
 
+    // Clear any stale match state from a previous session
+    const { matchId: staleMatchId } = useMatchStore.getState();
+    if (staleMatchId) {
+      console.log('[QueuePage] clearing stale matchId from previous session:', staleMatchId);
+      clearMatch();
+    }
+
     function emitJoin() {
-      if (joinedRef.current) return;
+      if (joinedRef.current || matchFoundRef.current) return;
       joinedRef.current = true;
       socket.emit('join_queue', {
         lat: useMatchStore.getState().lastLocation?.lat,
@@ -30,14 +65,14 @@ export default function QueuePage() {
       setQueueStatus('queued');
     }
 
-    // Named handlers for clean removal
     const onConnect = () => {
-      // Re-join queue on reconnect (server lost our state on disconnect)
       joinedRef.current = false;
       emitJoin();
     };
 
     const onMatchFound = (data: any) => {
+      if (matchFoundRef.current) return;
+      matchFoundRef.current = true;
       console.log('[QueuePage] match_found received', {
         matchId: data.matchId,
         roomName: data.roomName,
@@ -49,13 +84,16 @@ export default function QueuePage() {
       router.push(`/call/${data.matchId}`);
     };
 
-    const onQueueStatus = ({ status }: { status: string }) => {
+    const onQueueStatus = ({ status, message }: { status: string; message?: string }) => {
+      console.log('[QueuePage] queue_status:', status, message);
       if (status === 'left') {
         setQueueStatus('idle');
         router.push('/home');
       } else if (status === 'error') {
-        setQueueStatus('idle');
-        router.push('/home');
+        console.error('[QueuePage] queue error:', message);
+        // Don't immediately redirect on error — let user retry
+      } else if (status === 'queued') {
+        setQueueStatus('queued');
       }
     };
 
@@ -63,7 +101,6 @@ export default function QueuePage() {
     socket.on('match_found', onMatchFound);
     socket.on('queue_status', onQueueStatus);
 
-    // If already connected, join immediately
     if (socket.connected) {
       emitJoin();
     }
@@ -76,11 +113,12 @@ export default function QueuePage() {
       socket.off('match_found', onMatchFound);
       socket.off('queue_status', onQueueStatus);
     };
-  }, [setMatch, setQueueStatus, router, user]);
+  }, [setMatch, setQueueStatus, clearMatch, router, user]);
 
   function handleCancel() {
     const socket = connectSocket();
     socket.emit('leave_queue');
+    clearMatch();
     setQueueStatus('idle');
     router.push('/home');
   }
@@ -121,6 +159,31 @@ export default function QueuePage() {
           Preparing voice connection
         </div>
       </div>
+
+      {/* 20-second no-match reset */}
+      {showReset && !resetting && (
+        <div className="mb-6 w-full max-w-xs space-y-3">
+          <p className="text-sm text-muted-foreground">No match yet. Refresh your place in queue?</p>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleResetQueue}
+              className="flex-1 bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
+            >
+              Reset Queue
+            </Button>
+            <Button variant="outline" onClick={() => setShowReset(false)} className="flex-1">
+              Continue Waiting
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {resetting && (
+        <div className="mb-6 flex items-center gap-2 text-sm text-violet-400">
+          <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+          Refreshing your place in queue...
+        </div>
+      )}
 
       <Button variant="outline" onClick={handleCancel} className="rounded-full px-8">
         Cancel

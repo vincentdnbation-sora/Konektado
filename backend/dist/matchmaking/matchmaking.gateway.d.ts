@@ -23,6 +23,11 @@ export declare class MatchmakingGateway implements OnGatewayConnection, OnGatewa
         lng?: number;
         preferences?: any;
     }): Promise<void>;
+    resetQueue(client: Socket, data: {
+        lat?: number;
+        lng?: number;
+        preferences?: any;
+    }): Promise<void>;
     handleMemoryStart(client: Socket, data: {
         matchId: string;
         partnerId: string;

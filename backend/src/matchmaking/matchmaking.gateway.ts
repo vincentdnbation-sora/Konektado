@@ -167,8 +167,8 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       );
     }
 
-    // Step 2: Small delay to ensure teardown events are processed
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Step 2: Force-clean any remaining stale state for this user
+    await this.matchmakingService.forceCleanupUser(userId, this.redis);
 
     // Step 3: Now re-queue
     try {
@@ -186,6 +186,36 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       }
     } catch (err: any) {
       this.logger.error(`[next_match] error for userId=${userId}: ${err.message}`);
+      client.emit('queue_status', { status: 'error', message: err.message });
+    }
+  }
+
+  @SubscribeMessage('reset_queue')
+  async resetQueue(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { lat?: number; lng?: number; preferences?: any },
+  ) {
+    const userId = client.data.userId;
+    if (!userId) return;
+
+    this.logger.log(`[reset_queue] userId=${userId}`);
+
+    try {
+      const result = await this.matchmakingService.resetQueue(
+        userId,
+        { lat: data?.lat, lng: data?.lng, preferences: data?.preferences || {} },
+        this.redis,
+        this.server,
+      );
+
+      if (result.status === 'queued') {
+        client.emit('queue_status', { status: 'queued' });
+        this.logger.log(`[reset_queue] userId=${userId} re-queued successfully`);
+      } else if (result.status === 'matched') {
+        this.logger.log(`[reset_queue] userId=${userId} got instant match on reset`);
+      }
+    } catch (err: any) {
+      this.logger.error(`[reset_queue] error for userId=${userId}: ${err.message}`);
       client.emit('queue_status', { status: 'error', message: err.message });
     }
   }
