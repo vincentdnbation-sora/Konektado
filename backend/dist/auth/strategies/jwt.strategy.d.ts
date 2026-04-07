@@ -10,11 +10,14 @@ export declare class JwtStrategy extends JwtStrategy_base {
         sub: string;
         email: string;
     }): Promise<{
-        email: string;
         id: string;
+        email: string;
         passwordHash: string;
         fcmToken: string | null;
+        role: string;
         isBanned: boolean;
+        isDeleted: boolean;
+        deletedAt: Date | null;
         createdAt: Date;
         lastActive: Date | null;
     }>;

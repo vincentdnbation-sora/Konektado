@@ -16,6 +16,7 @@ const matchmaking_module_1 = require("./matchmaking/matchmaking.module");
 const voice_module_1 = require("./voice/voice.module");
 const game_module_1 = require("./game/game.module");
 const reports_module_1 = require("./reports/reports.module");
+const admin_module_1 = require("./admin/admin.module");
 const app_controller_1 = require("./app.controller");
 let AppModule = class AppModule {
 };
@@ -31,6 +32,7 @@ exports.AppModule = AppModule = __decorate([
             voice_module_1.VoiceModule,
             game_module_1.GameModule,
             reports_module_1.ReportsModule,
+            admin_module_1.AdminModule,
         ],
         controllers: [app_controller_1.AppController],
     })

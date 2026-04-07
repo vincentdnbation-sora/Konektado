@@ -4,26 +4,29 @@ export declare class UsersService {
     constructor(prisma: PrismaService);
     getProfile(userId: string): Promise<{
         profile: {
+            id: string;
             displayName: string;
+            bio: string | null;
             age: number;
             gender: string;
-            userId: string;
-            id: string;
-            bio: string | null;
             photoUrl: string | null;
+            userId: string;
         } | null;
         preferences: {
-            userId: string;
             id: string;
             preferredGender: string;
             minAge: number;
             maxAge: number;
             maxDistanceKm: number;
+            userId: string;
         } | null;
-        email: string;
         id: string;
+        email: string;
         fcmToken: string | null;
+        role: string;
         isBanned: boolean;
+        isDeleted: boolean;
+        deletedAt: Date | null;
         createdAt: Date;
         lastActive: Date | null;
     }>;
@@ -32,13 +35,13 @@ export declare class UsersService {
         bio?: string;
         photoUrl?: string;
     }): Promise<{
+        id: string;
         displayName: string;
+        bio: string | null;
         age: number;
         gender: string;
-        userId: string;
-        id: string;
-        bio: string | null;
         photoUrl: string | null;
+        userId: string;
     }>;
     updatePreferences(userId: string, data: {
         preferredGender?: string;
@@ -46,11 +49,11 @@ export declare class UsersService {
         maxAge?: number;
         maxDistanceKm?: number;
     }): Promise<{
-        userId: string;
         id: string;
         preferredGender: string;
         minAge: number;
         maxAge: number;
         maxDistanceKm: number;
+        userId: string;
     }>;
 }

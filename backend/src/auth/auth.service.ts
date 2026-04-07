@@ -21,6 +21,9 @@ export class AuthService {
       include: { profile: true },
     });
 
+    if (user?.isDeleted) throw new UnauthorizedException('Account has been deleted');
+    if (user?.isBanned) throw new UnauthorizedException('Account suspended');
+
     if (!user) {
       user = await this.prisma.user.create({
         data: {
@@ -80,6 +83,7 @@ export class AuthService {
 
     if (!user) throw new UnauthorizedException('Invalid credentials');
     if (user.isBanned) throw new UnauthorizedException('Account suspended');
+    if (user.isDeleted) throw new UnauthorizedException('Account has been deleted');
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');

@@ -10,5 +10,6 @@ import { VoiceModule } from '../voice/voice.module';
     JwtModule.register({ secret: process.env.JWT_SECRET || 'secret' }),
   ],
   providers: [MatchmakingService, MatchmakingGateway],
+  exports: [MatchmakingService],
 })
 export class MatchmakingModule {}

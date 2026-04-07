@@ -4,44 +4,47 @@ export declare class UsersController {
     constructor(usersService: UsersService);
     getProfile(req: any): Promise<{
         profile: {
+            id: string;
             displayName: string;
+            bio: string | null;
             age: number;
             gender: string;
-            userId: string;
-            id: string;
-            bio: string | null;
             photoUrl: string | null;
+            userId: string;
         } | null;
         preferences: {
-            userId: string;
             id: string;
             preferredGender: string;
             minAge: number;
             maxAge: number;
             maxDistanceKm: number;
+            userId: string;
         } | null;
-        email: string;
         id: string;
+        email: string;
         fcmToken: string | null;
+        role: string;
         isBanned: boolean;
+        isDeleted: boolean;
+        deletedAt: Date | null;
         createdAt: Date;
         lastActive: Date | null;
     }>;
     updateProfile(req: any, body: any): Promise<{
+        id: string;
         displayName: string;
+        bio: string | null;
         age: number;
         gender: string;
-        userId: string;
-        id: string;
-        bio: string | null;
         photoUrl: string | null;
+        userId: string;
     }>;
     updatePreferences(req: any, body: any): Promise<{
-        userId: string;
         id: string;
         preferredGender: string;
         minAge: number;
         maxAge: number;
         maxDistanceKm: number;
+        userId: string;
     }>;
 }

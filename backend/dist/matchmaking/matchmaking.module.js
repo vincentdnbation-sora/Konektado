@@ -22,6 +22,7 @@ exports.MatchmakingModule = MatchmakingModule = __decorate([
             jwt_1.JwtModule.register({ secret: process.env.JWT_SECRET || 'secret' }),
         ],
         providers: [matchmaking_service_1.MatchmakingService, matchmaking_gateway_1.MatchmakingGateway],
+        exports: [matchmaking_service_1.MatchmakingService],
     })
 ], MatchmakingModule);
 //# sourceMappingURL=matchmaking.module.js.map

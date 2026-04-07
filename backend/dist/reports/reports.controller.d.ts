@@ -5,8 +5,8 @@ export declare class ReportsController {
     report(req: any, body: any): Promise<{
         id: string;
         createdAt: Date;
-        description: string | null;
         matchId: string | null;
+        description: string | null;
         reason: string;
         reviewed: boolean;
         reporterId: string;
