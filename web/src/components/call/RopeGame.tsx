@@ -120,7 +120,7 @@ export default function RopeGame({ matchId, userId, partnerId, autoStart }: Prop
         <p className="text-xs text-muted-foreground">Tap as fast as you can to pull the rope to your side!</p>
         <button
           onClick={handleStartGame}
-          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-lg shadow-pink-500/20 active:scale-95 transition-transform"
+          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#E63946] to-[#FFD166] text-white shadow-lg shadow-[#E63946]/20 active:scale-95 transition-transform"
         >
           Start Game
         </button>
@@ -144,7 +144,7 @@ export default function RopeGame({ matchId, userId, partnerId, autoStart }: Prop
         </p>
         <button
           onClick={() => { setPhase('idle'); setEndResult(null); autoStarted.current = false; }}
-          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-lg shadow-pink-500/20 active:scale-95 transition-transform"
+          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#E63946] to-[#FFD166] text-white shadow-lg shadow-[#E63946]/20 active:scale-95 transition-transform"
         >
           Play Again
         </button>
@@ -173,9 +173,9 @@ export default function RopeGame({ matchId, userId, partnerId, autoStart }: Prop
       {/* Rope meter */}
       <div className="px-4 py-3">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-bold text-pink-400">You</span>
+          <span className="text-xs font-bold text-[#E63946]">You</span>
           <div className="flex-1" />
-          <span className="text-xs font-bold text-violet-400">Them</span>
+          <span className="text-xs font-bold text-[#FFD166]">Them</span>
         </div>
         <div className="relative h-5 bg-muted/40 rounded-full overflow-hidden border border-border">
           {/* Center line */}
@@ -186,13 +186,13 @@ export default function RopeGame({ matchId, userId, partnerId, autoStart }: Prop
             style={{
               width: `${meterPercent}%`,
               background: meterPercent < 50
-                ? 'linear-gradient(90deg, rgb(236 72 153 / 0.6), rgb(236 72 153 / 0.2))'
-                : 'linear-gradient(90deg, rgb(139 92 246 / 0.2), rgb(139 92 246 / 0.6))',
+                ? 'linear-gradient(90deg, rgb(230 57 70 / 0.6), rgb(230 57 70 / 0.2))'
+                : 'linear-gradient(90deg, rgb(255 209 102 / 0.2), rgb(255 209 102 / 0.6))',
             }}
           />
           {/* Indicator knot */}
           <div
-            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg border-2 border-pink-500 transition-all duration-75 z-20"
+            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg border-2 border-[#E63946] transition-all duration-75 z-20"
             style={{ left: `calc(${meterPercent}% - 8px)` }}
           />
         </div>
@@ -206,7 +206,7 @@ export default function RopeGame({ matchId, userId, partnerId, autoStart }: Prop
       <div className="p-3">
         <button
           onPointerDown={handlePull}
-          className="w-full py-8 rounded-xl text-2xl font-black bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-lg shadow-pink-500/30 active:scale-95 active:shadow-none transition-all duration-75 select-none"
+          className="w-full py-8 rounded-xl text-2xl font-black bg-gradient-to-r from-[#E63946] to-[#FFD166] text-white shadow-lg shadow-[#E63946]/30 active:scale-95 active:shadow-none transition-all duration-75 select-none"
           style={{ WebkitTapHighlightColor: 'transparent' }}
         >
           💪 PULL!

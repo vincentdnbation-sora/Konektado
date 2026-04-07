@@ -158,10 +158,10 @@ export function GameSheet({
         <div className="overflow-y-auto px-5 pb-6 space-y-5" style={{ maxHeight: 'calc(80vh - 80px)' }}>
           {/* Pending invite banner */}
           {inviteStatus.type === 'sent' && (
-            <div className="flex items-center gap-3 bg-violet-500/10 border border-violet-500/20 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-3 bg-[#FFD166]/10 border border-[#FFD166]/20 rounded-xl px-4 py-3">
               <span className="text-xl animate-bounce">📩</span>
               <div className="flex-1">
-                <p className="text-sm font-medium text-violet-400">Invite sent!</p>
+                <p className="text-sm font-medium text-[#FFD166]">Invite sent!</p>
                 <p className="text-xs text-muted-foreground">
                   Waiting for partner to accept {inviteStatus.gameTitle}...
                 </p>
@@ -180,13 +180,13 @@ export function GameSheet({
                   disabled={inviteStatus.type === 'sent'}
                   className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left active:scale-[.98]
                     ${inviteStatus.type === 'sent' && (inviteStatus as any).gameId === game.id
-                      ? 'bg-violet-500/10 border-violet-500/30'
-                      : 'bg-muted/30 border-border hover:border-violet-500/40 hover:bg-violet-500/5'
+                      ? 'bg-[#FFD166]/10 border-[#FFD166]/30'
+                      : 'bg-muted/30 border-border hover:border-[#FFD166]/40 hover:bg-[#FFD166]/5'
                     }
                     ${inviteStatus.type === 'sent' ? 'opacity-70 cursor-not-allowed' : ''}
                   `}
                 >
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-pink-500/20 to-violet-500/20 flex items-center justify-center text-2xl shrink-0">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#E63946]/20 to-[#FFD166]/20 flex items-center justify-center text-2xl shrink-0">
                     {game.icon}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -269,7 +269,7 @@ export function GameInviteOverlay({ invite, matchId, partnerId, onAccept, onDecl
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-6">
       <div className="w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl p-6 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
-        <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-pink-500/20 to-violet-500/20 flex items-center justify-center text-4xl">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-[#E63946]/20 to-[#FFD166]/20 flex items-center justify-center text-4xl">
           {game?.icon ?? '🎮'}
         </div>
         <div>
@@ -285,7 +285,7 @@ export function GameInviteOverlay({ invite, matchId, partnerId, onAccept, onDecl
           </button>
           <button
             onClick={handleAccept}
-            className="flex-1 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-lg shadow-pink-500/20 active:scale-95 transition-transform"
+            className="flex-1 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#E63946] to-[#FFD166] text-white shadow-lg shadow-[#E63946]/20 active:scale-95 transition-transform"
           >
             Let&apos;s Play!
           </button>

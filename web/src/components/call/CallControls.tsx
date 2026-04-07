@@ -74,7 +74,7 @@ export default function CallControls({ matchId, reportedId, isMuted, onMuteToggl
         {/* Next — skip to new match instantly */}
         <button
           onClick={onNext}
-          className="w-14 h-14 rounded-full border border-border bg-card hover:border-violet-500 hover:text-violet-400 flex items-center justify-center transition-colors"
+          className="w-14 h-14 rounded-full border border-border bg-card hover:border-[#FFD166] hover:text-[#FFD166] flex items-center justify-center transition-colors"
           title="Next match"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

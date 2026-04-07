@@ -187,7 +187,7 @@ export default function MemoryGame({ matchId, userId, partnerId, autoStart }: Pr
         </p>
         <button
           onClick={handleStartGame}
-          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-lg shadow-pink-500/20 active:scale-95 transition-transform"
+          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#E63946] to-[#FFD166] text-white shadow-lg shadow-[#E63946]/20 active:scale-95 transition-transform"
         >
           Start Memory Game
         </button>
@@ -210,7 +210,7 @@ export default function MemoryGame({ matchId, userId, partnerId, autoStart }: Pr
             setGame(null);
             setEndResult(null);
           }}
-          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-lg shadow-pink-500/20 active:scale-95 transition-transform"
+          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#E63946] to-[#FFD166] text-white shadow-lg shadow-[#E63946]/20 active:scale-95 transition-transform"
         >
           Play Again
         </button>
@@ -254,7 +254,7 @@ export default function MemoryGame({ matchId, userId, partnerId, autoStart }: Pr
       {/* Progress bar */}
       <div className="h-1 bg-muted">
         <div
-          className="h-full bg-gradient-to-r from-pink-500 to-violet-500 transition-all duration-500"
+          className="h-full bg-gradient-to-r from-[#E63946] to-[#FFD166] transition-all duration-500"
           style={{ width: `${(game.matchesFound / game.totalPairs) * 100}%` }}
         />
       </div>
@@ -278,9 +278,9 @@ export default function MemoryGame({ matchId, userId, partnerId, autoStart }: Pr
                   ${isMatchedCard
                     ? 'bg-green-500/15 border-2 border-green-500/40'
                     : isFlipped
-                      ? 'bg-violet-500/15 border-2 border-violet-500/40'
+                      ? 'bg-[#FFD166]/15 border-2 border-[#FFD166]/40'
                       : canFlip
-                        ? 'bg-muted/60 border-2 border-border hover:border-violet-500/50 hover:bg-violet-500/10 cursor-pointer'
+                        ? 'bg-muted/60 border-2 border-border hover:border-[#FFD166]/50 hover:bg-[#FFD166]/10 cursor-pointer'
                         : 'bg-muted/40 border-2 border-border/50 cursor-not-allowed opacity-70'
                   }
                 `}

@@ -130,9 +130,9 @@ export default function QueuePage() {
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center min-h-[80vh]">
       {/* Pulsing animation */}
       <div className="relative w-40 h-40 flex items-center justify-center mb-10">
-        <div className="absolute inset-0 rounded-full bg-pink-500/10 animate-ping" style={{ animationDuration: '2s' }} />
-        <div className="absolute inset-4 rounded-full bg-violet-500/10 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
-        <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center shadow-xl shadow-pink-500/30">
+        <div className="absolute inset-0 rounded-full bg-[#E63946]/10 animate-ping" style={{ animationDuration: '2s' }} />
+        <div className="absolute inset-4 rounded-full bg-[#FFD166]/10 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
+        <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-[#E63946] to-[#FFD166] flex items-center justify-center shadow-xl shadow-[#E63946]/30">
           <svg className="w-10 h-10 text-white animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
           </svg>
@@ -155,7 +155,7 @@ export default function QueuePage() {
           Checking preferences
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" style={{ animationDelay: '0.6s' }} />
+          <div className="w-2 h-2 rounded-full bg-[#FFD166] animate-pulse" style={{ animationDelay: '0.6s' }} />
           Preparing voice connection
         </div>
       </div>
@@ -167,7 +167,7 @@ export default function QueuePage() {
           <div className="flex gap-2">
             <Button
               onClick={handleResetQueue}
-              className="flex-1 bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
+              className="flex-1 bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0"
             >
               Reset Queue
             </Button>
@@ -179,8 +179,8 @@ export default function QueuePage() {
       )}
 
       {resetting && (
-        <div className="mb-6 flex items-center gap-2 text-sm text-violet-400">
-          <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+        <div className="mb-6 flex items-center gap-2 text-sm text-[#E63946]">
+          <div className="w-2 h-2 rounded-full bg-[#E63946] animate-pulse" />
           Refreshing your place in queue...
         </div>
       )}

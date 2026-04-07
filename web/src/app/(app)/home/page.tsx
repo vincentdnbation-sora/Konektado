@@ -79,7 +79,7 @@ export default function HomePage() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center max-w-lg mx-auto w-full">
       <div className="mb-8">
-        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-pink-500/20">
+        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#E63946] to-[#FFD166] flex items-center justify-center mx-auto mb-6 shadow-lg shadow-[#E63946]/20">
           <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
           </svg>
@@ -120,7 +120,7 @@ export default function HomePage() {
         <Button
           onClick={handleJoinQueue}
           size="lg"
-          className="h-16 px-12 text-lg rounded-full bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0 shadow-lg shadow-pink-500/30 transition-all hover:scale-105 active:scale-95"
+          className="h-16 px-12 text-lg rounded-full bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0 shadow-lg shadow-[#E63946]/30 transition-all hover:scale-105 active:scale-95"
         >
           Find Someone to Talk To
         </Button>

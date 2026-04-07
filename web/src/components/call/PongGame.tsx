@@ -135,7 +135,7 @@ export default function PongGame({ matchId, userId, partnerId, autoStart }: Prop
 
       // Center line
       ctx.setLineDash([4, 6]);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
+      ctx.strokeStyle = 'rgba(255, 209, 102, 0.3)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(canvas.width / 2, 0);
@@ -148,20 +148,20 @@ export default function PongGame({ matchId, userId, partnerId, autoStart }: Prop
       const paddleH = g.paddleH * scaleY;
       const margin = 15 * scaleX;
 
-      // Player 1 (left) - pink
+      // Player 1 (left) - red
       const p1Gradient = ctx.createLinearGradient(margin, 0, margin + paddleW, 0);
-      p1Gradient.addColorStop(0, '#ec4899');
-      p1Gradient.addColorStop(1, '#db2777');
+      p1Gradient.addColorStop(0, '#E63946');
+      p1Gradient.addColorStop(1, '#CF2F3D');
       ctx.fillStyle = p1Gradient;
       ctx.beginPath();
       ctx.roundRect(margin, (g.paddle1Y - g.paddleH / 2) * scaleY, paddleW, paddleH, 3);
       ctx.fill();
 
-      // Player 2 (right) - violet
+      // Player 2 (right) - yellow
       const p2x = canvas.width - margin - paddleW;
       const p2Gradient = ctx.createLinearGradient(p2x, 0, p2x + paddleW, 0);
-      p2Gradient.addColorStop(0, '#8b5cf6');
-      p2Gradient.addColorStop(1, '#7c3aed');
+      p2Gradient.addColorStop(0, '#FFD166');
+      p2Gradient.addColorStop(1, '#E6B800');
       ctx.fillStyle = p2Gradient;
       ctx.beginPath();
       ctx.roundRect(p2x, (g.paddle2Y - g.paddleH / 2) * scaleY, paddleW, paddleH, 3);
@@ -172,7 +172,7 @@ export default function PongGame({ matchId, userId, partnerId, autoStart }: Prop
       const by = g.ballY * scaleY;
       const br = g.ballRadius * Math.min(scaleX, scaleY);
 
-      ctx.shadowColor = '#ec4899';
+      ctx.shadowColor = '#E63946';
       ctx.shadowBlur = 12;
       ctx.fillStyle = '#fff';
       ctx.beginPath();
@@ -291,7 +291,7 @@ export default function PongGame({ matchId, userId, partnerId, autoStart }: Prop
         <p className="text-xs text-muted-foreground">Classic 2-player pong — drag to move your paddle!</p>
         <button
           onClick={handleStartGame}
-          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-lg shadow-pink-500/20 active:scale-95 transition-transform"
+          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#E63946] to-[#FFD166] text-white shadow-lg shadow-[#E63946]/20 active:scale-95 transition-transform"
         >
           Start Game
         </button>
@@ -312,7 +312,7 @@ export default function PongGame({ matchId, userId, partnerId, autoStart }: Prop
         </p>
         <button
           onClick={() => { setPhase('idle'); setEndResult(null); autoStarted.current = false; }}
-          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-lg shadow-pink-500/20 active:scale-95 transition-transform"
+          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#E63946] to-[#FFD166] text-white shadow-lg shadow-[#E63946]/20 active:scale-95 transition-transform"
         >
           Play Again
         </button>
@@ -324,9 +324,9 @@ export default function PongGame({ matchId, userId, partnerId, autoStart }: Prop
     <div className="rounded-2xl border border-border bg-card overflow-hidden select-none">
       {/* Scoreboard */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border">
-        <span className="text-sm font-bold text-pink-400">{amPlayer1 ? score1 : score2}</span>
+        <span className="text-sm font-bold text-[#E63946]">{amPlayer1 ? score1 : score2}</span>
         <span className="text-xs text-muted-foreground">First to {winningScore}</span>
-        <span className="text-sm font-bold text-violet-400">{amPlayer1 ? score2 : score1}</span>
+        <span className="text-sm font-bold text-[#FFD166]">{amPlayer1 ? score2 : score1}</span>
       </div>
 
       {/* Game canvas — drag on field to move paddle */}
@@ -342,10 +342,10 @@ export default function PongGame({ matchId, userId, partnerId, autoStart }: Prop
       >
         <canvas ref={canvasRef} className="w-full block" />
         {/* Labels overlay */}
-        <div className="absolute bottom-2 left-3 text-[10px] font-bold text-pink-400/60">
+        <div className="absolute bottom-2 left-3 text-[10px] font-bold text-[#E63946]/60">
           {amPlayer1 ? 'YOU' : 'THEM'}
         </div>
-        <div className="absolute bottom-2 right-3 text-[10px] font-bold text-violet-400/60">
+        <div className="absolute bottom-2 right-3 text-[10px] font-bold text-[#FFD166]/60">
           {amPlayer1 ? 'THEM' : 'YOU'}
         </div>
       </div>

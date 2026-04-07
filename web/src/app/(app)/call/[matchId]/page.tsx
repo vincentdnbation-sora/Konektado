@@ -234,7 +234,7 @@ function CallRoom({ isMuted, onRetry, micApproved, onPartnerLeft }: { isMuted: b
           </div>
           <button
             onClick={onRetry}
-            className="text-sm text-violet-400 bg-violet-500/10 border border-violet-500/30 rounded-full px-4 py-2"
+            className="text-sm text-[#FFD166] bg-[#FFD166]/10 border border-[#FFD166]/30 rounded-full px-4 py-2"
           >
             Retry voice connection
           </button>
@@ -258,7 +258,7 @@ function CallRoom({ isMuted, onRetry, micApproved, onPartnerLeft }: { isMuted: b
       {/* Tap prompt — calls room.startAudio() on user gesture to bypass autoplay */}
       <button
         onClick={handleEnableAudio}
-        className="bg-violet-500/10 border border-violet-500/30 rounded-xl px-5 py-3 text-sm text-violet-400 w-full text-center"
+        className="bg-[#FFD166]/10 border border-[#FFD166]/30 rounded-xl px-5 py-3 text-sm text-[#FFD166] w-full text-center"
       >
         🔊 Tap here if you can&apos;t hear audio
       </button>
@@ -546,7 +546,7 @@ export default function CallPage() {
         <div className="flex flex-col gap-3 w-full">
           <Button
             onClick={handleFindAnother}
-            className="bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
+            className="bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0"
           >
             Find Another Match
           </Button>
@@ -600,7 +600,7 @@ export default function CallPage() {
                   });
                 }
               }}
-              className="bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0 rounded-full px-8 py-6 text-base w-full"
+              className="bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0 rounded-full px-8 py-6 text-base w-full"
             >
               Open in Chrome
             </Button>
@@ -617,7 +617,7 @@ export default function CallPage() {
 
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center min-h-[60vh] max-w-sm mx-auto gap-6">
-        <div className="w-28 h-28 rounded-full bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center text-5xl shadow-xl shadow-pink-500/20">
+        <div className="w-28 h-28 rounded-full bg-gradient-to-br from-[#E63946] to-[#FFD166] flex items-center justify-center text-5xl shadow-xl shadow-[#E63946]/20">
           🎤
         </div>
         <h2 className="text-2xl font-bold">Match found!</h2>
@@ -637,7 +637,7 @@ export default function CallPage() {
         <Button
           onClick={requestMicPermission}
           disabled={micRequesting}
-          className="bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0 rounded-full px-8 py-6 text-lg w-full"
+          className="bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0 rounded-full px-8 py-6 text-lg w-full"
         >
           {micRequesting ? 'Requesting access...' : micDenied || micTimedOut ? 'Retry Microphone' : 'Start Voice Chat'}
         </Button>
@@ -705,7 +705,7 @@ export default function CallPage() {
             {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
           </div>
 
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-violet-500 to-pink-600 flex items-center justify-center mx-auto mb-4 text-4xl shadow-xl shadow-violet-500/20">
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#FFD166] to-[#E63946] flex items-center justify-center mx-auto mb-4 text-4xl shadow-xl shadow-[#FFD166]/20">
             ?
           </div>
           <h2 className="font-semibold text-xl">Someone nearby</h2>
@@ -781,7 +781,7 @@ export default function CallPage() {
           {barHeights.current.map((h, i) => (
             <div
               key={i}
-              className={`w-1.5 rounded-full ${isMuted ? 'bg-muted/40' : 'bg-gradient-to-t from-pink-500 to-violet-500'}`}
+              className={`w-1.5 rounded-full ${isMuted ? 'bg-muted/40' : 'bg-gradient-to-t from-[#E63946] to-[#FFD166]'}`}
               style={{
                 height: `${h}%`,
                 animation: isMuted ? 'none' : `pulse ${0.4 + (i % 5) * 0.1}s ease-in-out ${i * 0.03}s infinite alternate`,

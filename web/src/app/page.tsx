@@ -81,7 +81,7 @@ export default function OnboardPage() {
             <div
               key={s}
               className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                s <= step ? 'bg-gradient-to-r from-pink-500 to-violet-600' : 'bg-muted'
+                s <= step ? 'bg-gradient-to-r from-[#E63946] to-[#FFD166]' : 'bg-muted'
               }`}
             />
           ))}
@@ -112,7 +112,7 @@ export default function OnboardPage() {
                 }
                 setStep(2);
               }}
-              className="w-full h-12 bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
+              className="w-full h-12 bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0"
             >
               Continue →
             </Button>
@@ -155,7 +155,7 @@ export default function OnboardPage() {
                   }
                   setStep(3);
                 }}
-                className="flex-1 h-12 bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
+                className="flex-1 h-12 bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0"
               >
                 Continue →
               </Button>
@@ -178,7 +178,7 @@ export default function OnboardPage() {
                   onClick={() => setForm({ ...form, gender: g })}
                   className={`rounded-xl border px-4 py-4 text-sm capitalize font-medium transition-all ${
                     form.gender === g
-                      ? 'border-pink-500 bg-pink-500/10 text-pink-400'
+                      ? 'border-[#E63946] bg-[#E63946]/10 text-[#E63946]'
                       : 'border-border hover:border-muted-foreground'
                   }`}
                 >
@@ -193,7 +193,7 @@ export default function OnboardPage() {
               <Button
                 onClick={handleFinish}
                 disabled={!form.gender || loading}
-                className="flex-1 h-12 bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
+                className="flex-1 h-12 bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0"
               >
                 {loading ? 'Joining...' : 'Join Konektado'}
               </Button>

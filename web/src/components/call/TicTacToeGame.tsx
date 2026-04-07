@@ -127,7 +127,7 @@ export default function TicTacToeGame({ matchId, userId, partnerId, autoStart }:
         <p className="text-xs text-muted-foreground">Classic 3×3 — take turns, get three in a row!</p>
         <button
           onClick={handleStartGame}
-          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-lg shadow-pink-500/20 active:scale-95 transition-transform"
+          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#E63946] to-[#FFD166] text-white shadow-lg shadow-[#E63946]/20 active:scale-95 transition-transform"
         >
           Start Game
         </button>
@@ -148,7 +148,7 @@ export default function TicTacToeGame({ matchId, userId, partnerId, autoStart }:
         </p>
         <button
           onClick={() => { setPhase('idle'); setGame(null); setEndResult(null); autoStarted.current = false; }}
-          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-lg shadow-pink-500/20 active:scale-95 transition-transform"
+          className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#E63946] to-[#FFD166] text-white shadow-lg shadow-[#E63946]/20 active:scale-95 transition-transform"
         >
           Play Again
         </button>
@@ -163,7 +163,7 @@ export default function TicTacToeGame({ matchId, userId, partnerId, autoStart }:
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border">
         <span className="text-xs font-medium">
-          You: <span className="font-bold text-violet-400">{mySymbol}</span>
+          You: <span className="font-bold text-[#FFD166]">{mySymbol}</span>
         </span>
         <span className={`text-xs font-bold px-3 py-1 rounded-full ${
           isMyTurn
@@ -194,13 +194,13 @@ export default function TicTacToeGame({ matchId, userId, partnerId, autoStart }:
                     : cell
                       ? 'bg-muted/40 border-2 border-border'
                       : canClick
-                        ? 'bg-muted/30 border-2 border-border hover:border-violet-500/50 hover:bg-violet-500/10 cursor-pointer'
+                        ? 'bg-muted/30 border-2 border-border hover:border-[#FFD166]/50 hover:bg-[#FFD166]/10 cursor-pointer'
                         : 'bg-muted/20 border-2 border-border/50 cursor-not-allowed'
                   }
                 `}
               >
-                {cell === 'X' && <span className="text-pink-400">✕</span>}
-                {cell === 'O' && <span className="text-violet-400">○</span>}
+                {cell === 'X' && <span className="text-[#E63946]">✕</span>}
+                {cell === 'O' && <span className="text-[#FFD166]">○</span>}
               </button>
             );
           })}

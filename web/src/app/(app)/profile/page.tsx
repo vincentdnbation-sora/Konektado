@@ -64,7 +64,7 @@ export default function ProfilePage() {
                   onClick={() => setGender(g)}
                   className={`rounded-lg border px-4 py-2.5 text-sm capitalize transition-colors ${
                     gender === g
-                      ? 'border-pink-500 bg-pink-500/10 text-pink-400'
+                      ? 'border-[#E63946] bg-[#E63946]/10 text-[#E63946]'
                       : 'border-border hover:border-muted-foreground'
                   }`}
                 >
@@ -89,7 +89,7 @@ export default function ProfilePage() {
                   onClick={() => setPrefs({ ...prefs, preferredGender: g })}
                   className={`rounded-lg border px-4 py-2 text-sm capitalize transition-colors ${
                     prefs.preferredGender === g
-                      ? 'border-pink-500 bg-pink-500/10 text-pink-400'
+                      ? 'border-[#E63946] bg-[#E63946]/10 text-[#E63946]'
                       : 'border-border hover:border-muted-foreground'
                   }`}
                 >
@@ -129,7 +129,7 @@ export default function ProfilePage() {
               step={5}
               value={prefs.maxDistanceKm}
               onChange={(e) => setPrefs({ ...prefs, maxDistanceKm: +e.target.value })}
-              className="w-full accent-pink-500"
+              className="w-full accent-[#E63946]"
             />
           </div>
         </CardContent>
@@ -137,7 +137,7 @@ export default function ProfilePage() {
 
       <Button
         onClick={save}
-        className="w-full bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white border-0"
+        className="w-full bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0"
       >
         Save Changes
       </Button>
