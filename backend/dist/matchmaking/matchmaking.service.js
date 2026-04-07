@@ -34,32 +34,23 @@ let MatchmakingService = MatchmakingService_1 = class MatchmakingService {
     }
     addActiveUser(userId, socketId) {
         let sockets = this.activeUsers.get(userId);
-        const isNew = !sockets;
         if (!sockets) {
             sockets = new Set();
             this.activeUsers.set(userId, sockets);
+            sockets.add(socketId);
+            this.logger.log(`[presence] user online: userId=${userId} total=${this.activeUsers.size}`);
+            return true;
         }
         sockets.add(socketId);
-        if (isNew) {
-            this.logger.log(`[presence] user online: userId=${userId} total=${this.activeUsers.size}`);
-        }
-        else {
-            this.logger.debug(`[presence] extra socket for userId=${userId} socketId=${socketId} sockets=${sockets.size}`);
-        }
-        return isNew;
+        this.logger.debug(`[presence] socket added for userId=${userId} sockets=${sockets.size}`);
+        return false;
     }
     removeActiveSocket(userId, socketId) {
         const sockets = this.activeUsers.get(userId);
         if (!sockets)
-            return false;
+            return;
         sockets.delete(socketId);
-        if (sockets.size === 0) {
-            this.activeUsers.delete(userId);
-            this.logger.log(`[presence] user offline: userId=${userId} total=${this.activeUsers.size}`);
-            return true;
-        }
         this.logger.debug(`[presence] socket removed for userId=${userId} remaining=${sockets.size}`);
-        return false;
     }
     removeActiveUser(userId) {
         if (!this.activeUsers.has(userId))

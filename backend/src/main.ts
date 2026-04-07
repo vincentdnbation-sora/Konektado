@@ -3,7 +3,14 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // In production, suppress noisy NestJS startup logs (InstanceLoader, RouterExplorer, WebSocketsController)
+  // Keep log, warn, error, fatal. Debug only in development.
+  const isProduction = process.env.NODE_ENV === 'production';
+  const logLevels: any = isProduction
+    ? ['log', 'warn', 'error', 'fatal']
+    : ['log', 'warn', 'error', 'fatal', 'debug', 'verbose'];
+
+  const app = await NestFactory.create(AppModule, { logger: logLevels });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 

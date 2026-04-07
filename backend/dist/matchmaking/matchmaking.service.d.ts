@@ -18,7 +18,7 @@ export declare class MatchmakingService {
     private readonly activeUsers;
     constructor(prisma: PrismaService, voiceService: VoiceService);
     addActiveUser(userId: string, socketId: string): boolean;
-    removeActiveSocket(userId: string, socketId: string): boolean;
+    removeActiveSocket(userId: string, socketId: string): void;
     removeActiveUser(userId: string): boolean;
     getActiveUserCount(): number;
     hasActiveSockets(userId: string): boolean;

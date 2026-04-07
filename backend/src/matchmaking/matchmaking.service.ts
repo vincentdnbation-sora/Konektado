@@ -43,31 +43,24 @@ export class MatchmakingService {
 
   addActiveUser(userId: string, socketId: string): boolean {
     let sockets = this.activeUsers.get(userId);
-    const isNew = !sockets;
     if (!sockets) {
       sockets = new Set();
       this.activeUsers.set(userId, sockets);
-    }
-    sockets.add(socketId);
-    if (isNew) {
+      sockets.add(socketId);
       this.logger.log(`[presence] user online: userId=${userId} total=${this.activeUsers.size}`);
-    } else {
-      this.logger.debug(`[presence] extra socket for userId=${userId} socketId=${socketId} sockets=${sockets.size}`);
-    }
-    return isNew;
-  }
-
-  removeActiveSocket(userId: string, socketId: string): boolean {
-    const sockets = this.activeUsers.get(userId);
-    if (!sockets) return false;
-    sockets.delete(socketId);
-    if (sockets.size === 0) {
-      this.activeUsers.delete(userId);
-      this.logger.log(`[presence] user offline: userId=${userId} total=${this.activeUsers.size}`);
       return true;
     }
-    this.logger.debug(`[presence] socket removed for userId=${userId} remaining=${sockets.size}`);
+    sockets.add(socketId);
+    this.logger.debug(`[presence] socket added for userId=${userId} sockets=${sockets.size}`);
     return false;
+  }
+
+  /** Remove a socket but keep the user in the active map until the grace timer decides. */
+  removeActiveSocket(userId: string, socketId: string): void {
+    const sockets = this.activeUsers.get(userId);
+    if (!sockets) return;
+    sockets.delete(socketId);
+    this.logger.debug(`[presence] socket removed for userId=${userId} remaining=${sockets.size}`);
   }
 
   removeActiveUser(userId: string): boolean {

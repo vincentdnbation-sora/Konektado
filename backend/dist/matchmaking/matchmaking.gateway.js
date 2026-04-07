@@ -253,6 +253,9 @@ let MatchmakingGateway = MatchmakingGateway_1 = class MatchmakingGateway {
             await this.matchmakingService.endMatch(matchId, userId, 'user_logged_out', this.redis, this.server);
         }
         await this.matchmakingService.leaveQueue(userId, this.redis);
+        this.matchmakingService.removeActiveUser(userId);
+        this.matchmakingService.broadcastPresence(this.server, this.redis);
+        client.data.userId = null;
         client.disconnect();
     }
     handleGameDecline(client, data) {

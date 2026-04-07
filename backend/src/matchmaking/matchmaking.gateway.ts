@@ -376,6 +376,11 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       await this.matchmakingService.endMatch(matchId, userId, 'user_logged_out', this.redis, this.server);
     }
     await this.matchmakingService.leaveQueue(userId, this.redis);
+    // Remove from presence immediately and broadcast
+    this.matchmakingService.removeActiveUser(userId);
+    this.matchmakingService.broadcastPresence(this.server, this.redis);
+    // Prevent handleDisconnect from re-adding a grace timer for this socket
+    client.data.userId = null;
     client.disconnect();
   }
 
