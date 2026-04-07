@@ -8,6 +8,8 @@ import { VoiceModule } from './voice/voice.module';
 import { GameModule } from './game/game.module';
 import { ReportsModule } from './reports/reports.module';
 import { AdminModule } from './admin/admin.module';
+import { RoomModule } from './rooms/room.module';
+import { FriendModule } from './friends/friend.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -21,6 +23,8 @@ import { AppController } from './app.controller';
     GameModule,
     ReportsModule,
     AdminModule,
+    RoomModule,
+    FriendModule,
   ],
   controllers: [AppController],
 })

@@ -1,4 +1,4 @@
-import { IsString, MinLength, MaxLength, IsInt, Min, Max, IsIn, IsUUID } from 'class-validator';
+import { IsString, MinLength, MaxLength, IsInt, Min, Max, IsIn, IsUUID, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class AnonymousDto {
@@ -18,4 +18,8 @@ export class AnonymousDto {
 
   @IsIn(['male', 'female', 'non-binary', 'other'])
   gender: string;
+
+  @IsOptional()
+  @IsString()
+  avatar?: string;
 }

@@ -117,13 +117,31 @@ export default function HomePage() {
       </div>
 
       {queueStatus === 'idle' ? (
-        <Button
-          onClick={handleJoinQueue}
-          size="lg"
-          className="h-16 px-12 text-lg rounded-full bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0 shadow-lg shadow-[#E63946]/30 transition-all hover:scale-105 active:scale-95"
-        >
-          Find Someone to Talk To
-        </Button>
+        <div className="w-full space-y-4">
+          <Button
+            onClick={handleJoinQueue}
+            size="lg"
+            className="h-16 px-12 text-lg rounded-full bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0 shadow-lg shadow-[#E63946]/30 transition-all hover:scale-105 active:scale-95 w-full"
+          >
+            Find Someone to Talk To
+          </Button>
+          <Button
+            onClick={() => router.push('/rooms')}
+            size="lg"
+            variant="outline"
+            className="h-16 px-12 text-lg rounded-full w-full"
+          >
+            Join Walkie Room
+          </Button>
+          <Button
+            onClick={() => router.push('/friends')}
+            size="lg"
+            variant="outline"
+            className="h-16 px-12 text-lg rounded-full w-full"
+          >
+            Call a Friend
+          </Button>
+        </div>
       ) : (
         <Button
           onClick={handleLeaveQueue}

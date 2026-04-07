@@ -9,6 +9,7 @@ interface User {
     gender: string;
     photoUrl?: string;
     bio?: string;
+    avatar?: string;
   };
   preferences?: {
     preferredGender: string;

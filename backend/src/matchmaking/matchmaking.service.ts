@@ -11,6 +11,8 @@ const MATCHED_SET = 'matched:users';
 /** Grace period before treating a disconnect as permanent (covers mobile tab switches, network blips) */
 const DISCONNECT_GRACE_MS = 8000;
 
+export type UserState = 'idle' | 'searching' | 'in_call' | 'in_game' | 'in_room' | 'in_friend_call';
+
 export interface ActiveMatch {
   user1Id: string;
   user2Id: string;
@@ -25,6 +27,9 @@ export class MatchmakingService {
   readonly activeMatches = new Map<string, ActiveMatch>();
   private readonly userToMatch = new Map<string, string>();
 
+  /** User states: userId → state */
+  private readonly userStates = new Map<string, UserState>();
+
   /** Users currently being torn down — prevents re-queue during teardown */
   private readonly tearingDown = new Set<string>();
 
@@ -38,6 +43,33 @@ export class MatchmakingService {
     private prisma: PrismaService,
     private voiceService: VoiceService,
   ) {}
+
+  // ─── User State Management ────────────────────────────────────────────
+
+  getUserState(userId: string): UserState {
+    return this.userStates.get(userId) || 'idle';
+  }
+
+  setUserState(userId: string, state: UserState): void {
+    const prevState = this.getUserState(userId);
+    if (prevState !== state) {
+      this.userStates.set(userId, state);
+      this.logger.log(`[state] ${userId}: ${prevState} → ${state}`);
+    }
+  }
+
+  canTransitionTo(userId: string, newState: UserState): boolean {
+    const current = this.getUserState(userId);
+    const validTransitions: Record<UserState, UserState[]> = {
+      idle: ['searching', 'in_room', 'in_friend_call'],
+      searching: ['in_call'],
+      in_call: ['in_game', 'idle'],
+      in_game: ['idle'],
+      in_room: ['idle'],
+      in_friend_call: ['idle'],
+    };
+    return validTransitions[current]?.includes(newState) ?? false;
+  }
 
   // ─── Presence tracking ────────────────────────────────────────────────
 
@@ -131,6 +163,11 @@ export class MatchmakingService {
   ): Promise<{ status: string }> {
     this.logger.debug(`[joinQueue] userId=${userId}`);
 
+    // ── GUARD: check user state ──
+    if (!this.canTransitionTo(userId, 'searching')) {
+      throw new Error(`Cannot join queue: user is ${this.getUserState(userId)}`);
+    }
+
     // ── GUARD: if teardown is in progress, wait briefly then force-clear ──
     if (this.tearingDown.has(userId)) {
       this.logger.debug(`[joinQueue] user ${userId} teardown in progress — waiting 200ms`);
@@ -193,6 +230,7 @@ export class MatchmakingService {
 
     await redis.zadd(QUEUE_KEY, Date.now(), userId);
     this.logger.debug(`[joinQueue] queued userId=${userId}`);
+    this.setUserState(userId, 'searching');
     return { status: 'queued' };
   }
 
@@ -203,6 +241,7 @@ export class MatchmakingService {
       redis.del(`${USER_DATA_PREFIX}${userId}`),
     ]);
     this.logger.debug(`[leaveQueue] userId=${userId}`);
+    this.setUserState(userId, 'idle');
     return { status: 'left' };
   }
 
@@ -403,6 +442,10 @@ export class MatchmakingService {
     this.userToMatch.set(user1Id, matchId);
     this.userToMatch.set(user2Id, matchId);
 
+    // Set user states
+    this.setUserState(user1Id, 'in_call');
+    this.setUserState(user2Id, 'in_call');
+
     const livekitUrl = process.env.LIVEKIT_URL || 'wss://dating-app-46dvc6ij.livekit.cloud';
 
     server.to(`user:${user1Id}`).emit('match_found', {
@@ -457,6 +500,8 @@ export class MatchmakingService {
       // Release teardown lock AFTER all state is cleaned
       this.tearingDown.delete(user1Id);
       this.tearingDown.delete(user2Id);
+      this.setUserState(user1Id, 'idle');
+      this.setUserState(user2Id, 'idle');
       this.logger.debug(`[endMatch] ${user1Id}, ${user2Id} queue-eligible`);
     } else {
       // No in-memory match — check DB
@@ -476,6 +521,8 @@ export class MatchmakingService {
         }
         this.tearingDown.delete(dbMatch.user1Id);
         this.tearingDown.delete(dbMatch.user2Id);
+        this.setUserState(dbMatch.user1Id, 'idle');
+        this.setUserState(dbMatch.user2Id, 'idle');
       } else {
         // No match found anywhere — just clean up the requesting user
         this.logger.warn(`[endMatch] no match found for matchId=${matchId} — cleaning up userId=${userId}`);

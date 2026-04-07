@@ -27,6 +27,8 @@ model User {
   reported    Report[]     @relation("ReportedReports")
   blockedBy   Block[]      @relation("BlockerBlocks")
   blocking    Block[]      @relation("BlockedBlocks")
+  friendsAsUser  Friend[]  @relation("UserFriends")
+  friendsAsFriend Friend[] @relation("FriendUsers")
 
   @@map("users")
 }
@@ -39,6 +41,7 @@ model Profile {
   age         Int
   gender      String
   photoUrl    String? @map("photo_url")
+  avatar      String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -131,4 +134,17 @@ model Block {
 
   @@unique([blockerId, blockedId])
   @@map("blocks")
+}
+
+model Friend {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  friendId  String   @map("friend_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User @relation("UserFriends", fields: [userId], references: [id])
+  friend User @relation("FriendUsers", fields: [friendId], references: [id])
+
+  @@unique([userId, friendId])
+  @@map("friends")
 }

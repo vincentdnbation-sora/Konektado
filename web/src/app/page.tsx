@@ -23,7 +23,10 @@ export default function OnboardPage() {
   const { token, setSession } = useAuthStore();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ username: '', age: '', gender: '' });
+  const [form, setForm] = useState({ username: '', age: '', gender: '', avatar: '' });
+
+  const AVATARS = ['😀', '😊', '😎', '🤓', '😍', '🥳', '🤠', '👽', '🤖', '🐱', '🐶', '🦊',
+                   '🦁', '🐼', '🐸', '🦄', '🐙', '🦋', '🌟', '🔥', '🎭', '🎮', '🎸', '🚀'];
 
   useEffect(() => {
     if (token) router.replace('/home');
@@ -52,6 +55,7 @@ export default function OnboardPage() {
         username: form.username.trim(),
         age,
         gender: form.gender,
+        avatar: form.avatar || '😊',
       });
       setSession(data.token, data.user);
       toast.success(`Welcome, ${data.user.profile?.displayName}!`);
@@ -77,7 +81,7 @@ export default function OnboardPage() {
 
         {/* Step indicator */}
         <div className="flex gap-2">
-          {[1, 2, 3].map((s) => (
+          {[1, 2, 3, 4].map((s) => (
             <div
               key={s}
               className={`h-1 flex-1 rounded-full transition-all duration-300 ${
@@ -191,8 +195,52 @@ export default function OnboardPage() {
                 ← Back
               </Button>
               <Button
+                onClick={() => {
+                  if (!form.gender) {
+                    toast.error('Please select your gender');
+                    return;
+                  }
+                  setStep(4);
+                }}
+                disabled={!form.gender}
+                className="flex-1 h-12 bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0"
+              >
+                Continue →
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Avatar */}
+        {step === 4 && (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-2xl font-bold mb-1">Pick your avatar</h1>
+              <p className="text-muted-foreground text-sm">This is how others will see you</p>
+            </div>
+            <div className="grid grid-cols-6 gap-2">
+              {AVATARS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => setForm({ ...form, avatar: emoji })}
+                  className={`text-2xl p-2 rounded-lg border transition-colors ${
+                    form.avatar === emoji
+                      ? 'border-[#E63946] bg-[#E63946]/10'
+                      : 'border-border hover:border-muted-foreground'
+                  }`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setStep(3)} className="flex-1 h-12">
+                ← Back
+              </Button>
+              <Button
                 onClick={handleFinish}
-                disabled={!form.gender || loading}
+                disabled={!form.avatar || loading}
                 className="flex-1 h-12 bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0"
               >
                 {loading ? 'Joining...' : 'Join Konektado'}

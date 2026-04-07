@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
+import api from '@/lib/api';
 
 const GENDERS = ['male', 'female', 'non-binary', 'other'];
 
@@ -14,6 +15,8 @@ export default function ProfilePage() {
   const { user, setUser, logout } = useAuthStore();
   const [displayName, setDisplayName] = useState(user?.profile?.displayName || '');
   const [gender, setGender] = useState(user?.profile?.gender || '');
+  const [avatar, setAvatar] = useState(user?.profile?.avatar || '');
+  const [saving, setSaving] = useState(false);
   const [prefs, setPrefs] = useState({
     preferredGender: user?.preferences?.preferredGender || 'any',
     minAge: user?.preferences?.minAge || 18,
@@ -21,7 +24,7 @@ export default function ProfilePage() {
     maxDistanceKm: user?.preferences?.maxDistanceKm || 50,
   });
 
-  function save() {
+  async function save() {
     if (!displayName.trim() || displayName.trim().length < 2) {
       toast.error('Name must be at least 2 characters');
       return;
@@ -30,13 +33,24 @@ export default function ProfilePage() {
       toast.error('Please select a gender');
       return;
     }
-    const updated = {
-      ...user!,
-      profile: { ...user!.profile!, displayName: displayName.trim(), gender },
-      preferences: prefs,
-    };
-    setUser(updated);
-    toast.success('Profile saved!');
+    setSaving(true);
+    try {
+      await Promise.all([
+        api.patch('/users/profile', { displayName: displayName.trim(), avatar }),
+        api.patch('/users/preferences', prefs),
+      ]);
+      const updated = {
+        ...user!,
+        profile: { ...user!.profile!, displayName: displayName.trim(), gender, avatar },
+        preferences: prefs,
+      };
+      setUser(updated);
+      toast.success('Profile saved!');
+    } catch {
+      toast.error('Failed to save profile');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -55,20 +69,20 @@ export default function ProfilePage() {
             />
           </div>
           <div className="space-y-2">
-            <Label>Gender</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {GENDERS.map((g) => (
+            <Label>Avatar</Label>
+            <div className="grid grid-cols-6 gap-2">
+              {['😀', '😊', '😎', '🤓', '😍', '🥳', '🤠', '👽', '🤖', '🐱', '🐶', '🦊'].map((emoji) => (
                 <button
-                  key={g}
+                  key={emoji}
                   type="button"
-                  onClick={() => setGender(g)}
-                  className={`rounded-lg border px-4 py-2.5 text-sm capitalize transition-colors ${
-                    gender === g
-                      ? 'border-[#E63946] bg-[#E63946]/10 text-[#E63946]'
+                  onClick={() => setAvatar(emoji)}
+                  className={`text-2xl p-2 rounded-lg border transition-colors ${
+                    avatar === emoji
+                      ? 'border-[#E63946] bg-[#E63946]/10'
                       : 'border-border hover:border-muted-foreground'
                   }`}
                 >
-                  {g}
+                  {emoji}
                 </button>
               ))}
             </div>
@@ -137,9 +151,10 @@ export default function ProfilePage() {
 
       <Button
         onClick={save}
+        disabled={saving}
         className="w-full bg-gradient-to-r from-[#E63946] to-[#FFD166] hover:from-[#CF2F3D] hover:to-[#E6B800] text-white border-0"
       >
-        Save Changes
+        {saving ? 'Saving...' : 'Save Changes'}
       </Button>
 
       <Button variant="ghost" onClick={logout} className="w-full text-muted-foreground">

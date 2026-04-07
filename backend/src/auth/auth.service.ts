@@ -35,6 +35,7 @@ export class AuthService {
               displayName: dto.username,
               age: dto.age,
               gender: dto.gender,
+              avatar: dto.avatar || null,
             },
           },
           preferences: { create: {} },
